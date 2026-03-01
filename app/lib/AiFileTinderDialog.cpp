@@ -29,6 +29,9 @@
 #include <QMenu>
 #include <QProgressBar>
 #include <QListView>
+#include <QScrollArea>
+#include <QFrame>
+#include <QDoubleSpinBox>
 
 // Batch size for API calls
 static const int kBatchSize = 50;
@@ -58,7 +61,14 @@ AiSetupDialog::AiSetupDialog(const QStringList& existing_folders,
 }
 
 void AiSetupDialog::build_ui() {
-    auto* main_layout = new QVBoxLayout(this);
+    auto* outer_layout = new QVBoxLayout(this);
+    outer_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto* scroll = new QScrollArea();
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto* scroll_content = new QWidget();
+    auto* main_layout = new QVBoxLayout(scroll_content);
     main_layout->setSpacing(8);
     main_layout->setContentsMargins(14, 14, 14, 14);
 
@@ -109,11 +119,25 @@ void AiSetupDialog::build_ui() {
     ep_row->addWidget(endpoint_edit_, 1);
     prov_layout->addLayout(ep_row);
 
+    connect(endpoint_edit_, &QLineEdit::editingFinished, this, [this]() {
+        QString text = endpoint_edit_->text().trimmed();
+        if (!text.isEmpty()) {
+            QUrl url(text);
+            if (!url.isValid() || url.scheme().isEmpty()) {
+                endpoint_edit_->setStyleSheet("QLineEdit { border: 1px solid #e74c3c; }");
+                endpoint_edit_->setToolTip("Invalid URL: must start with http:// or https://");
+            } else {
+                endpoint_edit_->setStyleSheet("");
+                endpoint_edit_->setToolTip("");
+            }
+        }
+    });
+
     auto* model_row = new QHBoxLayout();
     model_row->addWidget(new QLabel("Model:"));
     model_combo_ = new QComboBox();
     model_combo_->setEditable(true);
-    model_combo_->setInsertPolicy(QComboBox::NoInsert);
+    model_combo_->setInsertPolicy(QComboBox::InsertAtBottom);
     model_combo_->setPlaceholderText("Select or type a model name");
     model_row->addWidget(model_combo_, 1);
     auto* fetch_btn = new QPushButton("Fetch");
@@ -124,7 +148,75 @@ void AiSetupDialog::build_ui() {
         fetch_models(provider_combo_->currentText());
     });
     model_row->addWidget(fetch_btn);
+    auto* test_btn = new QPushButton("Test");
+    test_btn->setFixedWidth(ui::scaling::scaled(50));
+    test_btn->setToolTip("Test the API connection with a simple request");
+    test_btn->setStyleSheet("QPushButton { padding: 3px 8px; background-color: #27ae60; color: white; border-radius: 3px; }"
+                           "QPushButton:hover { background-color: #2ecc71; }");
+    connect(test_btn, &QPushButton::clicked, this, [this, test_btn]() {
+        QString api_key = api_key_edit_->text().trimmed();
+        QString endpoint = endpoint_edit_->text().trimmed();
+        QString model = model_combo_->currentText().trimmed();
+        QString provider = provider_combo_->currentText();
+        bool is_local = provider.contains("Ollama") || provider.contains("LM Studio") || provider.contains("Local");
+
+        if (!is_local && api_key.isEmpty()) {
+            QMessageBox::warning(this, "Test Failed", "API key is required for cloud providers.");
+            return;
+        }
+        if (endpoint.isEmpty()) {
+            QMessageBox::warning(this, "Test Failed", "Endpoint URL is required.");
+            return;
+        }
+
+        // Build a minimal test request
+        QUrl url(endpoint);
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        request.setTransferTimeout(10000);
+        if (!is_local && !api_key.isEmpty()) {
+            if (provider == "Anthropic") {
+                request.setRawHeader("x-api-key", api_key.toUtf8());
+                request.setRawHeader("anthropic-version", "2023-06-01");
+            } else if (provider != "Google Gemini") {
+                request.setRawHeader("Authorization", QByteArray("Bearer ") + api_key.toUtf8());
+            }
+        }
+
+        QJsonObject body;
+        body["model"] = model;
+        body["max_tokens"] = 10;
+        QJsonArray messages;
+        QJsonObject msg;
+        msg["role"] = "user";
+        msg["content"] = "Say OK";
+        messages.append(msg);
+        body["messages"] = messages;
+
+        test_btn->setEnabled(false);
+        test_btn->setText("...");
+        QNetworkReply* reply = fetch_nam_->post(request, QJsonDocument(body).toJson());
+        connect(reply, &QNetworkReply::finished, this, [this, reply, test_btn]() {
+            test_btn->setEnabled(true);
+            test_btn->setText("Test");
+            reply->deleteLater();
+            int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            if (reply->error() == QNetworkReply::NoError || (status >= 200 && status < 300)) {
+                QMessageBox::information(this, "Connection OK", 
+                    QString("API connection successful (HTTP %1).").arg(status));
+            } else {
+                QMessageBox::warning(this, "Connection Failed",
+                    QString("API returned HTTP %1.\n\n%2").arg(status).arg(reply->errorString()));
+            }
+        });
+    });
+    model_row->addWidget(test_btn);
     prov_layout->addLayout(model_row);
+
+    auto* model_hint = new QLabel("Recommended: use the cheapest model (gpt-4o-mini, claude-3-haiku, gemini-1.5-flash, llama-3.1-8b) for file sorting.");
+    model_hint->setStyleSheet("color: #7f8c8d; font-size: 9px;");
+    model_hint->setWordWrap(true);
+    prov_layout->addWidget(model_hint);
 
     // Recalculate cost when model name changes (free models suppress warning)
     connect(model_combo_, &QComboBox::currentTextChanged, this, [this]() { update_cost_estimate(); });
@@ -242,7 +334,7 @@ void AiSetupDialog::build_ui() {
     auto* purpose_layout = new QVBoxLayout(purpose_group);
 
     purpose_edit_ = new QTextEdit();
-    purpose_edit_->setMaximumHeight(45);
+    purpose_edit_->setMaximumHeight(70);
     purpose_edit_->setPlaceholderText("e.g. 'This is my Downloads folder, organize by project and file type'");
     purpose_edit_->setStyleSheet("QTextEdit { background: #2d2d2d; color: #ecf0f1; border: 1px solid #4a6078; }");
     purpose_layout->addWidget(purpose_edit_);
@@ -261,11 +353,28 @@ void AiSetupDialog::build_ui() {
     conf_row->addStretch();
     main_layout->addLayout(conf_row);
 
+    auto* budget_row = new QHBoxLayout();
+    budget_row->addWidget(new QLabel("Max budget:"));
+    auto* budget_spin = new QDoubleSpinBox();
+    budget_spin->setRange(0.0, 100.0);
+    budget_spin->setValue(0.0);
+    budget_spin->setPrefix("$");
+    budget_spin->setDecimals(2);
+    budget_spin->setSingleStep(0.10);
+    budget_spin->setToolTip("Set to $0.00 for no limit. Analysis will stop if estimated cost exceeds this.");
+    budget_row->addWidget(budget_spin);
+    budget_row->addStretch();
+    main_layout->addLayout(budget_row);
+
     // ── Cost estimate ──
     cost_label_ = new QLabel("");
     cost_label_->setStyleSheet("color: #f39c12; font-size: 11px;");
     cost_label_->setWordWrap(true);
     main_layout->addWidget(cost_label_);
+    auto* price_note = new QLabel("(Token prices are estimates and may change. Check your provider dashboard for exact costs.)");
+    price_note->setStyleSheet("color: #7f8c8d; font-size: 8px;");
+    price_note->setWordWrap(true);
+    main_layout->addWidget(price_note);
     update_cost_estimate();
 
     main_layout->addStretch();
@@ -305,7 +414,9 @@ void AiSetupDialog::build_ui() {
     });
     btn_layout->addWidget(ok_btn);
 
-    main_layout->addLayout(btn_layout);
+    scroll->setWidget(scroll_content);
+    outer_layout->addWidget(scroll, 1);
+    outer_layout->addLayout(btn_layout);
 }
 
 void AiSetupDialog::load_saved_provider() {
