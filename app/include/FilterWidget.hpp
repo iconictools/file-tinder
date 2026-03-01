@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QDialog>
 #include <QListWidget>
+#include <QFrame>
 
 // Forward declare - actual enums are in StandaloneFileTinderDialog.hpp
 enum class FileFilterType;

@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QMessageBox>
+#include <QFrame>
 
 // ============================================================================
 // CustomExtensionDialog
@@ -133,12 +134,28 @@ void FilterWidget::setup_ui() {
     filter_combo_->setMinimumWidth(100);
     layout->addWidget(filter_combo_);
 
+    // Clear filter button
+    auto* clear_filter_btn = new QPushButton("X");
+    clear_filter_btn->setMaximumWidth(ui::scaling::scaled(24));
+    clear_filter_btn->setMaximumHeight(ui::scaling::scaled(24));
+    clear_filter_btn->setToolTip("Clear filter");
+    clear_filter_btn->setStyleSheet("QPushButton { font-size: 10px; color: #e74c3c; border: 1px solid #555; border-radius: 3px; padding: 0; }"
+                                    "QPushButton:hover { background-color: #5d3a37; }");
+    connect(clear_filter_btn, &QPushButton::clicked, this, [this]() {
+        filter_combo_->setCurrentIndex(0);
+    });
+    layout->addWidget(clear_filter_btn);
+
     // Include folders checkbox
     include_folders_check_ = new QCheckBox("Include Folders");
     layout->addWidget(include_folders_check_);
 
-    // Spacer
-    layout->addSpacing(16);
+    // Visual separator
+    auto* separator = new QFrame();
+    separator->setFrameShape(QFrame::VLine);
+    separator->setFrameShadow(QFrame::Sunken);
+    separator->setStyleSheet("color: #555;");
+    layout->addWidget(separator);
 
     // Sort section
     auto* sort_label = new QLabel("Sort:");
@@ -154,9 +171,11 @@ void FilterWidget::setup_ui() {
 
     // Sort order button
     sort_order_btn_ = new QPushButton("Asc");
-    sort_order_btn_->setFixedWidth(50);
+    sort_order_btn_->setMinimumWidth(ui::scaling::scaled(60));
     sort_order_btn_->setCheckable(true);
     sort_order_btn_->setToolTip("Toggle Ascending/Descending");
+    sort_order_btn_->setStyleSheet("QPushButton { padding: 3px 8px; border: 1px solid #555; border-radius: 3px; }"
+                                   "QPushButton:hover { background-color: #3d566e; }");
     layout->addWidget(sort_order_btn_);
 
     layout->addStretch();
@@ -170,6 +189,15 @@ void FilterWidget::setup_ui() {
             this, &FilterWidget::on_sort_order_toggled);
     connect(include_folders_check_, &QCheckBox::toggled,
             this, &FilterWidget::on_include_folders_toggled);
+
+    // Active filter highlight
+    connect(filter_combo_, &QComboBox::currentTextChanged, this, [this](const QString& text) {
+        if (text == "All Files" || text == "All") {
+            filter_combo_->setStyleSheet("");
+        } else {
+            filter_combo_->setStyleSheet("QComboBox { border: 2px solid #3498db; background-color: #1a3a5c; }");
+        }
+    });
 }
 
 void FilterWidget::on_filter_changed(int index) {
