@@ -1679,6 +1679,23 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
         stats_layout->addWidget(pace_label);
     }
     
+    // Calculate disk space freed by deletions
+    qint64 space_freed = 0;
+    for (const auto& f : files_) {
+        if (f.decision == "delete") {
+            space_freed += f.size;
+        }
+    }
+    if (space_freed > 0) {
+        QString size_str;
+        if (space_freed < 1024LL) size_str = QString("%1 B").arg(space_freed);
+        else if (space_freed < 1024LL*1024) size_str = QString("%1 KB").arg(space_freed/1024.0, 0, 'f', 1);
+        else if (space_freed < 1024LL*1024*1024) size_str = QString("%1 MB").arg(space_freed/(1024.0*1024.0), 0, 'f', 2);
+        else size_str = QString("%1 GB").arg(space_freed/(1024.0*1024.0*1024.0), 0, 'f', 2);
+        auto* space_label = new QLabel(QString("<span style='color: #e74c3c;'>Disk space freed: %1</span>").arg(size_str));
+        stats_layout->addWidget(space_label);
+    }
+    
     layout->addWidget(stats_group);
     
     if (!result.error_messages.isEmpty()) {
@@ -1707,6 +1724,26 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
         table->horizontalHeader()->setStretchLastSection(true);
         table->setSelectionBehavior(QAbstractItemView::SelectRows);
         table->setRowCount(static_cast<int>(successful_entries.size()));
+        
+        auto* log_filter_layout = new QHBoxLayout();
+        log_filter_layout->addWidget(new QLabel("Filter:"));
+        auto* log_filter_combo = new QComboBox();
+        log_filter_combo->addItems({"All", "Moved", "Deleted", "Kept"});
+        log_filter_layout->addWidget(log_filter_combo);
+        log_filter_layout->addStretch();
+        
+        auto* batch_undo_btn = new QPushButton("Undo All");
+        batch_undo_btn->setStyleSheet("QPushButton { padding: 4px 12px; background-color: #e67e22; color: white; border-radius: 3px; }"
+                                      "QPushButton:hover { background-color: #d35400; }");
+        batch_undo_btn->setToolTip("Undo all reversible operations");
+        log_filter_layout->addWidget(batch_undo_btn);
+
+        auto* export_btn = new QPushButton("Export Log");
+        export_btn->setStyleSheet("QPushButton { padding: 4px 12px; background-color: #3498db; color: white; border-radius: 3px; }"
+                                  "QPushButton:hover { background-color: #2980b9; }");
+        log_filter_layout->addWidget(export_btn);
+        
+        layout->addLayout(log_filter_layout);
         
         for (int i = 0; i < static_cast<int>(successful_entries.size()); ++i) {
             const auto& entry = successful_entries[i];
@@ -1770,6 +1807,54 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
         table->resizeColumnsToContents();
         table->setColumnWidth(1, qMax(table->columnWidth(1), 200));
         layout->addWidget(table, 1);
+        
+        connect(log_filter_combo, &QComboBox::currentTextChanged, this, [table](const QString& filter) {
+            for (int row = 0; row < table->rowCount(); ++row) {
+                if (filter == "All") {
+                    table->setRowHidden(row, false);
+                    continue;
+                }
+                auto* item = table->item(row, 0);
+                if (item) {
+                    bool match = item->text().contains(filter, Qt::CaseInsensitive);
+                    table->setRowHidden(row, !match);
+                }
+            }
+        });
+        
+        connect(batch_undo_btn, &QPushButton::clicked, this, [table]() {
+            auto reply = QMessageBox::question(nullptr, "Undo All",
+                "This will undo all reversible operations. Continue?",
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply != QMessageBox::Yes) return;
+            for (int row = 0; row < table->rowCount(); ++row) {
+                auto* btn = qobject_cast<QPushButton*>(table->cellWidget(row, table->columnCount() - 1));
+                if (btn && btn->isEnabled() && btn->text() == "Undo") {
+                    btn->click();
+                }
+            }
+        });
+        
+        connect(export_btn, &QPushButton::clicked, this, [table]() {
+            QString filename = QFileDialog::getSaveFileName(nullptr, "Export Execution Log",
+                QDir::homePath() + "/file_tinder_log.csv", "CSV Files (*.csv)");
+            if (filename.isEmpty()) return;
+            QFile file(filename);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream out(&file);
+                out << "Action,File,Destination,Status\n";
+                for (int row = 0; row < table->rowCount(); ++row) {
+                    QStringList cols;
+                    for (int col = 0; col < table->columnCount() - 1; ++col) {
+                        auto* item = table->item(row, col);
+                        cols << (item ? "\"" + item->text().replace("\"", "\"\"") + "\"" : "\"\"");
+                    }
+                    out << cols.join(",") << "\n";
+                }
+                file.close();
+                QMessageBox::information(nullptr, "Exported", QString("Log exported to %1").arg(filename));
+            }
+        });
     }
     
     // Close button
