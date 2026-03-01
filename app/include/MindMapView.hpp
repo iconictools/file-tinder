@@ -85,6 +85,7 @@ private:
     bool compact_mode_ = true;  // Compact (small) vs expanded (wider) folder buttons
     bool show_full_paths_ = false;
     int custom_width_ = 0;  // 0 = use compact/expanded defaults
+    bool row_major_ = false;  // false = column-major (top-to-bottom), true = row-major (left-to-right)
     
     void build_grid();
     void place_folder_node(FolderNode* node);
@@ -98,6 +99,8 @@ public:
     bool show_full_paths() const { return show_full_paths_; }
     void set_custom_width(int w) { custom_width_ = w; }
     int custom_width() const { return custom_width_; }
+    void set_row_major(bool rm) { row_major_ = rm; }
+    bool row_major() const { return row_major_; }
     void sort_alphabetically();
     void sort_by_count();
 
@@ -117,6 +120,7 @@ private:
     QStringList ordered_paths_;     // Paths in grid order (row-major by column)
     void update_focus_visual();
     void build_ordered_paths();
+    void clamp_focused_index();
 };
 
 #endif // MIND_MAP_VIEW_HPP

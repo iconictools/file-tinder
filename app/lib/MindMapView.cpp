@@ -9,6 +9,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileInfo>
+#include <QLabel>
 
 // === FolderButton Implementation ===
 
@@ -200,6 +201,15 @@ void MindMapView::refresh_layout() {
     );
     connect(add_button_, &QPushButton::clicked, this, &MindMapView::add_folder_requested);
     grid_layout_->addWidget(add_button_, next_row_, next_col_);
+
+    // Show empty state message if no child folders exist
+    if (!model_ || !model_->root_node() || model_->root_node()->children.empty()) {
+        auto* empty_label = new QLabel("No destination folders yet.\nClick [+] to add folders.", content_widget_);
+        empty_label->setStyleSheet("color: #888; font-size: 13px; font-style: italic;");
+        empty_label->setAlignment(Qt::AlignCenter);
+        empty_label->move(200, 50);
+        empty_label->show();
+    }
     
     // Set the new content widget
     scroll_area_->setWidget(content_widget_);
@@ -226,9 +236,12 @@ void MindMapView::build_grid() {
     int font_size = compact_mode_ ? 11 : 12;
     
     // Root folder in column 0, spanning all rows that children will use
+    int root_w = compact_mode_ ? ui::scaling::scaled(140) : ui::scaling::scaled(200);
+    int root_h = compact_mode_ ? ui::scaling::scaled(38) : ui::scaling::scaled(42);
+    if (custom_width_ > 0) root_w = ui::scaling::scaled(custom_width_ + 20);
     auto* root_btn = new FolderButton(root, content_widget_);
     root_btn->set_show_full_path(show_full_paths_);
-    root_btn->setFixedSize(btn_w, btn_h);
+    root_btn->setFixedSize(root_w, root_h);
     root_btn->setStyleSheet(
         QString("QPushButton { text-align: center; padding: 2px 6px; "
         "background-color: #1a252f; border: 2px solid #3498db; "
@@ -275,11 +288,21 @@ void MindMapView::place_folder_node(FolderNode* node) {
     connect(btn, &FolderButton::folder_clicked, this, &MindMapView::folder_clicked);
     connect(btn, &FolderButton::folder_right_clicked, this, &MindMapView::folder_context_menu);
     
-    // Advance: go down in current column, wrap to next column
-    next_row_++;
-    if (next_row_ >= max_rows_per_col_) {
-        next_row_ = 0;
+    // Advance position based on layout direction
+    if (row_major_) {
+        // Row-major: fill left-to-right, then wrap down
         next_col_++;
+        if (next_col_ >= max_rows_per_col_ + 1) {  // +1 to account for root column
+            next_col_ = 1;
+            next_row_++;
+        }
+    } else {
+        // Column-major: fill top-to-bottom, then wrap right
+        next_row_++;
+        if (next_row_ >= max_rows_per_col_) {
+            next_row_ = 0;
+            next_col_++;
+        }
     }
     
     // Place children (they go into the grid too)
@@ -289,15 +312,22 @@ void MindMapView::place_folder_node(FolderNode* node) {
 }
 
 void MindMapView::zoom_in() {
-    // No-op for widget-based view
+    if (custom_width_ < 300) {
+        custom_width_ += 20;
+        refresh_layout();
+    }
 }
 
 void MindMapView::zoom_out() {
-    // No-op for widget-based view
+    if (custom_width_ > 80) {
+        custom_width_ -= 20;
+        refresh_layout();
+    }
 }
 
 void MindMapView::zoom_fit() {
-    // No-op for widget-based view
+    custom_width_ = compact_mode_ ? 120 : 180;
+    refresh_layout();
 }
 
 void MindMapView::set_selected_folder(const QString& path) {
@@ -417,9 +447,16 @@ void MindMapView::update_focus_visual() {
     }
 }
 
+void MindMapView::clamp_focused_index() {
+    if (focused_index_ < 0) focused_index_ = 0;
+    if (focused_index_ >= static_cast<int>(ordered_paths_.size()))
+        focused_index_ = static_cast<int>(ordered_paths_.size()) - 1;
+}
+
 void MindMapView::focus_next() {
     if (ordered_paths_.isEmpty()) return;
     focused_index_ = (focused_index_ + 1) % ordered_paths_.size();
+    clamp_focused_index();
     update_focus_visual();
 }
 
@@ -427,6 +464,7 @@ void MindMapView::focus_prev() {
     if (ordered_paths_.isEmpty()) return;
     focused_index_--;
     if (focused_index_ < 0) focused_index_ = ordered_paths_.size() - 1;
+    clamp_focused_index();
     update_focus_visual();
 }
 
@@ -452,6 +490,7 @@ void MindMapView::focus_up() {
     }
     // If no button above, wrap to bottom of previous column
     focus_prev();
+    clamp_focused_index();
 }
 
 void MindMapView::focus_down() {
@@ -474,6 +513,7 @@ void MindMapView::focus_down() {
     }
     // If no button below, wrap to next
     focus_next();
+    clamp_focused_index();
 }
 
 void MindMapView::activate_focused() {
