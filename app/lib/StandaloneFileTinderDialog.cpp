@@ -1326,6 +1326,20 @@ void StandaloneFileTinderDialog::show_review_summary() {
     table->horizontalHeader()->setStretchLastSection(true);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     
+    // Filter/sort bar for review table
+    auto* review_filter_layout = new QHBoxLayout();
+    review_filter_layout->addWidget(new QLabel("Filter:"));
+    auto* review_filter_combo = new QComboBox();
+    review_filter_combo->addItems({"All", "Keep", "Delete", "Skip", "Move", "Copy", "Pending"});
+    review_filter_layout->addWidget(review_filter_combo);
+    review_filter_layout->addSpacing(16);
+    review_filter_layout->addWidget(new QLabel("Sort:"));
+    auto* review_sort_combo = new QComboBox();
+    review_sort_combo->addItems({"Original Order", "By Name", "By Decision", "By Destination"});
+    review_filter_layout->addWidget(review_sort_combo);
+    review_filter_layout->addStretch();
+    layout->addLayout(review_filter_layout);
+    
     // Determine mode name for this dialog
     QString mode_name = "Basic";
     if (windowTitle().contains("AI Mode")) mode_name = "AI";
@@ -1423,6 +1437,20 @@ void StandaloneFileTinderDialog::show_review_summary() {
         }
     });
     
+    connect(review_filter_combo, &QComboBox::currentTextChanged, this, [table](const QString& filter) {
+        for (int row = 0; row < table->rowCount(); ++row) {
+            if (filter == "All") {
+                table->setRowHidden(row, false);
+                continue;
+            }
+            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(row, 1));
+            if (combo) {
+                bool match = combo->currentText().compare(filter, Qt::CaseInsensitive) == 0;
+                table->setRowHidden(row, !match);
+            }
+        }
+    });
+    
     // Folder creation note
     int new_folder_count = 0;
     QSet<QString> dest_folders;
@@ -1445,6 +1473,8 @@ void StandaloneFileTinderDialog::show_review_summary() {
     auto* btn_layout = new QHBoxLayout();
     
     auto* cancel_btn = new QPushButton("Cancel");
+    cancel_btn->setStyleSheet("QPushButton { padding: 8px 16px; background-color: #7f8c8d; color: white; border-radius: 4px; }"
+                              "QPushButton:hover { background-color: #95a5a6; }");
     connect(cancel_btn, &QPushButton::clicked, &summary_dialog, &QDialog::reject);
     btn_layout->addWidget(cancel_btn);
     
@@ -1504,6 +1534,10 @@ void StandaloneFileTinderDialog::show_review_summary() {
     btn_layout->addWidget(execute_btn);
     
     layout->addLayout(btn_layout);
+    
+    auto* shortcut_hint = new QLabel("Shortcuts: Ctrl+A = Select all rows");
+    shortcut_hint->setStyleSheet("color: #666; font-size: 10px;");
+    layout->addWidget(shortcut_hint);
     
     summary_dialog.exec();
 }
