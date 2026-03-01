@@ -35,7 +35,7 @@
 #include <QStackedWidget>
 #include <QListWidget>
 
-// Batch size for API calls
+// Default batch size for API calls (used in cost estimation)
 static const int kBatchSize = 50;
 // Timeout for API requests (ms) — higher for local LLMs
 static const int kCloudTimeoutMs = 60000;
@@ -870,6 +870,28 @@ bool AiFileTinderDialog::show_ai_setup() {
     return true;
 }
 
+int AiFileTinderDialog::calculate_batch_size(int folder_count, int total_files) const {
+    // Base batch size
+    int base = 50;
+
+    // Reduce for large folder counts (more context per request)
+    if (folder_count > 30) base = 30;
+    else if (folder_count > 15) base = 40;
+
+    // Local models can handle larger batches (no token cost)
+    if (provider_config_.is_local) base = qMin(base + 20, 100);
+
+    // For very small file sets, use a single batch
+    if (total_files <= base) return total_files;
+
+    // For free-tier APIs with strict rate limits, use smaller batches
+    if (is_free_tier_ && provider_config_.rate_limit_rpm <= 30) {
+        base = qMin(base, 25);
+    }
+
+    return base;
+}
+
 void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
     if (files_.empty()) {
         QMessageBox::information(this, "No Files", "No files to analyze.");
@@ -920,9 +942,10 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
         available_folders.prepend(source_folder_);
     }
 
-    // Calculate batches
+    // Calculate batches with dynamic sizing
     int total_files = static_cast<int>(file_descriptions.size());
-    int total_batches = (total_files + kBatchSize - 1) / kBatchSize;
+    int batch_size = calculate_batch_size(static_cast<int>(available_folders.size()), total_files);
+    int total_batches = (total_files + batch_size - 1) / batch_size;
 
     // Progress dialog with real-time log
     QDialog progress_dialog(this);
@@ -1005,9 +1028,9 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
     int files_classified = 0;
 
     for (int batch = 0; batch < total_batches && !cancelled; ++batch) {
-        int start = batch * kBatchSize;
-        int end = qMin(start + kBatchSize, total_files);
-        int batch_size = end - start;
+        int start = batch * batch_size;
+        int end = qMin(start + batch_size, total_files);
+        int current_batch_size = end - start;
 
         log(QString("Batch %1/%2 \xe2\x80\x94 analyzing files %3-%4...")
             .arg(batch + 1).arg(total_batches).arg(start + 1).arg(end));
@@ -1101,10 +1124,10 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
         file_prog_bar->setValue(files_classified);
 
         // If partial parse failure, retry once
-        if (parsed_count < batch_size) {
-            int failed = batch_size - parsed_count;
+        if (parsed_count < current_batch_size) {
+            int failed = current_batch_size - parsed_count;
             log(QString("%1/%2 files parsed. Retrying %3 failed...")
-                .arg(parsed_count).arg(batch_size).arg(failed));
+                .arg(parsed_count).arg(current_batch_size).arg(failed));
 
             // Build a retry prompt with just the failed file indices
             QSet<int> parsed_indices;

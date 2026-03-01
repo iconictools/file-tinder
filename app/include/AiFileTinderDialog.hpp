@@ -176,6 +176,9 @@ private:
     void clear_folder_highlights();
     void on_folder_clicked_from_ai(const QString& folder_path);
 
+    // Dynamic batch sizing based on folder count, model type, and file count
+    int calculate_batch_size(int folder_count, int total_files) const;
+
     // Rate limiting
     bool check_rate_limit();
     void reset_rate_limit();

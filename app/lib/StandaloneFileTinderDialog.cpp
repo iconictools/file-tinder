@@ -36,6 +36,7 @@
 #include <QUrl>
 #include <QMouseEvent>
 #include <QElapsedTimer>
+#include <QLocale>
 #include <QMenu>
 #include <QImageReader>
 #include <algorithm>
@@ -1338,6 +1339,10 @@ void StandaloneFileTinderDialog::show_review_summary() {
     review_sort_combo->addItems({"Original Order", "By Name", "By Decision", "By Destination"});
     review_filter_layout->addWidget(review_sort_combo);
     review_filter_layout->addStretch();
+    auto* preview_toggle = new QCheckBox("Preview on hover");
+    preview_toggle->setChecked(false);
+    preview_toggle->setToolTip("Show file details when hovering over rows");
+    review_filter_layout->addWidget(preview_toggle);
     layout->addLayout(review_filter_layout);
     
     // Determine mode name for this dialog
@@ -1365,6 +1370,18 @@ void StandaloneFileTinderDialog::show_review_summary() {
         // File name (read-only)
         auto* name_item = new QTableWidgetItem(file.name);
         name_item->setFlags(name_item->flags() & ~Qt::ItemIsEditable);
+        name_item->setData(Qt::UserRole, i);
+
+        // Visual color based on decision
+        QColor row_color;
+        if (file.decision == "keep") row_color = QColor("#27ae60");
+        else if (file.decision == "delete") row_color = QColor("#e74c3c");
+        else if (file.decision == "move") row_color = QColor("#3498db");
+        else if (file.decision == "copy") row_color = QColor("#9b59b6");
+        else if (file.decision == "skip") row_color = QColor("#f39c12");
+        else row_color = QColor("#888");
+        name_item->setForeground(row_color);
+
         table->setItem(visible_row, 0, name_item);
         
         // Decision (editable via combo box)
@@ -1416,7 +1433,27 @@ void StandaloneFileTinderDialog::show_review_summary() {
     table->resizeColumnsToContents();
     table->setColumnWidth(0, qMax(table->columnWidth(0), 200));
     layout->addWidget(table, 1);
-    
+
+    // Connect preview-on-hover toggle
+    connect(preview_toggle, &QCheckBox::toggled, this, [this, table](bool checked) {
+        for (int row = 0; row < table->rowCount(); ++row) {
+            auto* item = table->item(row, 0);
+            if (item && checked) {
+                int idx = item->data(Qt::UserRole).toInt();
+                if (idx >= 0 && idx < static_cast<int>(files_.size())) {
+                    const auto& f = files_[idx];
+                    QString tip = QString("Path: %1\nSize: %2\nType: %3")
+                        .arg(f.path)
+                        .arg(QLocale().formattedDataSize(f.size))
+                        .arg(f.mime_type);
+                    item->setToolTip(tip);
+                }
+            } else if (item) {
+                item->setToolTip("");
+            }
+        }
+    });
+
     // Connect bulk action buttons
     connect(bulk_keep_btn, &QPushButton::clicked, this, [table]() {
         for (int r = 0; r < table->rowCount(); ++r) {
