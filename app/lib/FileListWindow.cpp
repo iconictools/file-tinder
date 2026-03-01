@@ -11,6 +11,8 @@
 #include <QFileInfo>
 #include <QApplication>
 #include <QMouseEvent>
+#include <QComboBox>
+#include <QLocale>
 
 static const int kFileIndexRole = Qt::UserRole + 200;
 
@@ -29,7 +31,7 @@ FileListWindow::FileListWindow(std::vector<FileToProcess>& files,
 }
 
 void FileListWindow::build_ui() {
-    setMinimumSize(ui::scaling::scaled(320), ui::scaling::scaled(400));
+    setMinimumSize(ui::scaling::scaled(280), ui::scaling::scaled(320));
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
@@ -39,10 +41,17 @@ void FileListWindow::build_ui() {
     auto* filter_row = new QHBoxLayout();
     filter_edit_ = new QLineEdit();
     filter_edit_->setPlaceholderText("Filter files...");
-    filter_edit_->setStyleSheet(
-        "padding: 5px 8px; background-color: #2d2d2d; border: 1px solid #555; color: #ecf0f1;");
+    filter_edit_->setStyleSheet("padding: 5px 8px;");
     connect(filter_edit_, &QLineEdit::textChanged, this, &FileListWindow::on_filter_changed);
     filter_row->addWidget(filter_edit_);
+
+    sort_combo_ = new QComboBox();
+    sort_combo_->addItems({"Name", "Decision", "Extension"});
+    sort_combo_->setMaximumWidth(100);
+    sort_combo_->setToolTip("Sort files in list");
+    connect(sort_combo_, &QComboBox::currentTextChanged, this, [this]() { update_list(); });
+    filter_row->addWidget(sort_combo_);
+
     layout->addLayout(filter_row);
 
     // File list
@@ -50,10 +59,8 @@ void FileListWindow::build_ui() {
     list_widget_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     list_widget_->setDragEnabled(true);
     list_widget_->setStyleSheet(
-        "QListWidget { background-color: #1e1e1e; border: 1px solid #404040; color: #ecf0f1; }"
-        "QListWidget::item { padding: 3px 6px; border-bottom: 1px solid #333; }"
-        "QListWidget::item:selected { background-color: #0078d4; }"
-        "QListWidget::item:hover { background-color: #2a2a2a; }");
+        "QListWidget::item { padding: 3px 6px; }"
+        "QListWidget::item:selected { background-color: palette(highlight); color: palette(highlighted-text); }");
     connect(list_widget_, &QListWidget::itemClicked, this, &FileListWindow::on_item_clicked);
     connect(list_widget_, &QListWidget::itemDoubleClicked, this, &FileListWindow::on_item_double_clicked);
 
@@ -92,17 +99,17 @@ void FileListWindow::build_ui() {
     // Status bar
     auto* status_row = new QHBoxLayout();
     count_label_ = new QLabel();
-    count_label_->setStyleSheet("color: #888; font-size: 10px;");
+    count_label_->setStyleSheet("font-size: 10px;");
     status_row->addWidget(count_label_);
     status_row->addStretch();
     selection_label_ = new QLabel();
-    selection_label_->setStyleSheet("color: #888; font-size: 10px;");
+    selection_label_->setStyleSheet("font-size: 10px;");
     status_row->addWidget(selection_label_);
     layout->addLayout(status_row);
 
     // Tip
     auto* tip = new QLabel("Click: navigate | Ctrl/Shift+Click: multi-select | Right-click: assign to folder");
-    tip->setStyleSheet("color: #666; font-size: 9px;");
+    tip->setStyleSheet("font-size: 9px;");
     tip->setWordWrap(true);
     layout->addWidget(tip);
 }
@@ -140,7 +147,8 @@ void FileListWindow::update_list() {
         else if (file.decision == "copy") status = "[C]";
         else status = "[?]";
 
-        QString display = QString("%1 %2").arg(status, file.name);
+        QString display = QString("%1 %2 (%3)").arg(status, file.name,
+            QLocale().formattedDataSize(file.size, 1, QLocale::DataSizeTraditionalFormat));
 
         auto* item = new QListWidgetItem(display);
         item->setData(kFileIndexRole, fi);
@@ -164,6 +172,36 @@ void FileListWindow::update_list() {
         item->setToolTip(file.path);
         list_widget_->addItem(item);
         ++shown;
+    }
+
+    // Sort based on combo selection
+    if (sort_combo_ && sort_combo_->currentText() != "Name") {
+        QString sort_key = sort_combo_->currentText();
+        list_widget_->sortItems(Qt::AscendingOrder);
+        if (sort_key == "Decision") {
+            // Stable sort by extracting decision prefix
+            QList<QListWidgetItem*> items;
+            while (list_widget_->count())
+                items.append(list_widget_->takeItem(0));
+            std::stable_sort(items.begin(), items.end(), [this](QListWidgetItem* a, QListWidgetItem* b) {
+                int fi_a = a->data(kFileIndexRole).toInt();
+                int fi_b = b->data(kFileIndexRole).toInt();
+                return files_[fi_a].decision < files_[fi_b].decision;
+            });
+            for (auto* it : items)
+                list_widget_->addItem(it);
+        } else if (sort_key == "Extension") {
+            QList<QListWidgetItem*> items;
+            while (list_widget_->count())
+                items.append(list_widget_->takeItem(0));
+            std::stable_sort(items.begin(), items.end(), [this](QListWidgetItem* a, QListWidgetItem* b) {
+                int fi_a = a->data(kFileIndexRole).toInt();
+                int fi_b = b->data(kFileIndexRole).toInt();
+                return files_[fi_a].extension.toLower() < files_[fi_b].extension.toLower();
+            });
+            for (auto* it : items)
+                list_widget_->addItem(it);
+        }
     }
 
     count_label_->setText(QString("%1 / %2 files").arg(shown).arg(filtered_indices_.size()));

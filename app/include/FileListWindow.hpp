@@ -5,6 +5,7 @@
 #include <QListWidget>
 #include <QLabel>
 #include <QLineEdit>
+#include <QComboBox>
 #include <QPushButton>
 #include <vector>
 
@@ -44,10 +45,11 @@ private:
     int current_index_;
     QStringList destination_folders_;
 
-    QLineEdit* filter_edit_;
-    QListWidget* list_widget_;
-    QLabel* count_label_;
-    QLabel* selection_label_;
+    QLineEdit* filter_edit_ = nullptr;
+    QComboBox* sort_combo_ = nullptr;
+    QListWidget* list_widget_ = nullptr;
+    QLabel* count_label_ = nullptr;
+    QLabel* selection_label_ = nullptr;
 };
 
 #endif // FILE_LIST_WINDOW_HPP
