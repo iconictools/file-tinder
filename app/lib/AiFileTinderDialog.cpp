@@ -603,7 +603,7 @@ void AiFileTinderDialog::initialize() {
             "border-radius: 4px; color: white; font-size: 11px; }"
             "QPushButton:hover { background-color: #2980b9; }"
         );
-        rerun_ai_btn_->setToolTip("Re-run AI analysis on remaining unsorted files or all files");
+        rerun_ai_btn_->setToolTip("Configure AI provider in 'AI Setup' to enable re-running");
         rerun_ai_btn_->setEnabled(false);
         connect(rerun_ai_btn_, &QPushButton::clicked, this, [this]() {
             if (!ai_configured_) {
@@ -706,18 +706,11 @@ void AiFileTinderDialog::initialize() {
             main_layout->addWidget(ai_suggestions_panel_);
         }
 
-        // AI Reasoning label — shows why the AI picked these folders
         ai_reasoning_label_ = new QLabel();
-        ai_reasoning_label_->setStyleSheet(
-            "color: #95a5a6; font-size: 10px; padding: 4px 8px; "
-            "background-color: #2c3e50; border-radius: 3px;");
+        ai_reasoning_label_->setStyleSheet("color: #95a5a6; font-size: 10px; font-style: italic; padding: 2px 4px;");
         ai_reasoning_label_->setWordWrap(true);
         ai_reasoning_label_->setVisible(false);
-        if (main_layout->count() > 2) {
-            main_layout->insertWidget(main_layout->count() - 2, ai_reasoning_label_);
-        } else {
-            main_layout->addWidget(ai_reasoning_label_);
-        }
+        ai_sugg_layout->addWidget(ai_reasoning_label_);
     }
 }
 
@@ -831,7 +824,17 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
     auto* prog_bar = new QProgressBar();
     prog_bar->setRange(0, total_batches);
     prog_bar->setValue(0);
+    prog_bar->setFormat("Batch %v / %m");
     prog_layout->addWidget(prog_bar);
+
+    auto* file_prog_bar = new QProgressBar();
+    file_prog_bar->setRange(0, total_files);
+    file_prog_bar->setValue(0);
+    file_prog_bar->setFormat("Files classified: %v / %m (%p%)");
+    file_prog_bar->setStyleSheet(
+        "QProgressBar { border: 1px solid #3c3c3c; border-radius: 3px; text-align: center; background-color: #2d2d2d; }"
+        "QProgressBar::chunk { background-color: #27ae60; }");
+    prog_layout->addWidget(file_prog_bar);
 
     auto* log_browser = new QTextBrowser();
     log_browser->setStyleSheet("QTextBrowser { background: #1a1a2e; color: #e0e0e0; font-family: monospace; font-size: 11px; }");
@@ -946,19 +949,31 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
         if (!error.isEmpty()) {
             log(QString("ERROR: Batch %1/%2 failed: %3").arg(batch + 1).arg(total_batches).arg(error));
 
-            // Error recovery: let user choose
+            // Error recovery: let user choose (with Retry option for API overloads)
             progress_dialog.hide();
-            auto reply = QMessageBox::question(this, "AI Analysis Interrupted",
-                QString("AI analysis interrupted after %1/%2 files.\n\n"
-                        "%3 files remain unclassified.\n\n"
-                        "What would you like to do?")
-                    .arg(files_classified).arg(total_files).arg(total_files - files_classified),
-                QMessageBox::Abort | QMessageBox::Ignore,
-                QMessageBox::Ignore);
+            QMessageBox err_box(this);
+            err_box.setWindowTitle("AI Analysis Interrupted");
+            err_box.setText(QString("AI analysis interrupted after %1/%2 files.\n\n"
+                        "%3 files remain unclassified.")
+                    .arg(files_classified).arg(total_files).arg(total_files - files_classified));
+            err_box.setInformativeText("Retry will re-attempt the failed batch. Continue will proceed with partial results. Abort will cancel the analysis.");
+            auto* retry_btn = err_box.addButton("Retry", QMessageBox::AcceptRole);
+            retry_btn->setStyleSheet("QPushButton { background-color: #3498db; color: white; padding: 4px 12px; border-radius: 3px; }");
+            err_box.addButton("Continue with partial results", QMessageBox::RejectRole);
+            auto* abort_btn = err_box.addButton(QMessageBox::Abort);
+            err_box.setDefaultButton(retry_btn);
+            err_box.exec();
 
-            if (reply == QMessageBox::Abort) {
+            if (err_box.clickedButton() == abort_btn) {
                 suggestions_.clear();
                 return;
+            }
+            if (err_box.clickedButton() == retry_btn) {
+                batch--;  // Retry the same batch
+                log("Retrying failed batch...");
+                progress_dialog.show();
+                QApplication::processEvents();
+                continue;
             }
             // Continue to review with partial results
             break;
@@ -970,6 +985,7 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
         auto batch_suggestions = parse_ai_response(response);
         int parsed_count = static_cast<int>(batch_suggestions.size());
         files_classified += parsed_count;
+        file_prog_bar->setValue(files_classified);
 
         // If partial parse failure, retry once
         if (parsed_count < batch_size) {
@@ -1000,6 +1016,7 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
                         batch_suggestions.push_back(s);
                     }
                     files_classified += static_cast<int>(retry_results.size());
+                    file_prog_bar->setValue(files_classified);
                     log(QString("  Retry recovered %1 more files").arg(retry_results.size()));
                 }
             }
