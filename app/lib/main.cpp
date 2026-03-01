@@ -306,7 +306,11 @@ private:
             "QPushButton { padding: 6px 12px; background-color: #4a4a4a; color: #cccccc; border: 1px solid #555555; }"
             "QPushButton:hover { background-color: #555555; }"
         );
-        connect(diag_btn, &QPushButton::clicked, this, &FileTinderLauncher::open_diagnostics);
+        connect(diag_btn, &QPushButton::clicked, this, [this]() {
+            QMessageBox::information(this, "Diagnostics Deprecated",
+                "The built-in diagnostic tool has been deprecated.\n\n"
+                "For debugging, use the application log file and system monitoring tools.");
+        });
         tools_row->addWidget(diag_btn);
         
         root_layout->addLayout(tools_row);
@@ -618,7 +622,7 @@ private:
         
         QDialog dialog(this);
         dialog.setWindowTitle("Undo History");
-        dialog.setMinimumSize(600, 400);
+        dialog.resize(ui::scaling::scaled(600), ui::scaling::scaled(400));
         
         auto* layout = new QVBoxLayout(&dialog);
         
@@ -627,11 +631,20 @@ private:
         info_label->setWordWrap(true);
         layout->addWidget(info_label);
         
+        auto* filter_layout = new QHBoxLayout();
+        filter_layout->addWidget(new QLabel("Filter:"));
+        auto* history_filter = new QComboBox();
+        history_filter->addItems({"All", "Moved", "Deleted"});
+        filter_layout->addWidget(history_filter);
+        filter_layout->addStretch();
+        layout->addLayout(filter_layout);
+        
         auto* table = new QTableWidget();
         table->setColumnCount(5);
         table->setHorizontalHeaderLabels({"Action", "File", "Destination", "Time", "Undo"});
         table->horizontalHeader()->setStretchLastSection(true);
         table->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table->setSortingEnabled(true);
         table->setRowCount(static_cast<int>(log_entries.size()));
         
         for (int i = 0; i < static_cast<int>(log_entries.size()); ++i) {
@@ -641,7 +654,7 @@ private:
             action_item->setFlags(action_item->flags() & ~Qt::ItemIsEditable);
             table->setItem(i, 0, action_item);
             
-            auto* file_item = new QTableWidgetItem(QFileInfo(src).fileName());
+            auto* file_item = new QTableWidgetItem(src);
             file_item->setFlags(file_item->flags() & ~Qt::ItemIsEditable);
             file_item->setToolTip(src);
             table->setItem(i, 1, file_item);
@@ -696,6 +709,23 @@ private:
         
         table->resizeColumnsToContents();
         layout->addWidget(table, 1);
+        
+        connect(history_filter, &QComboBox::currentTextChanged, this, [table](const QString& filter) {
+            for (int r = 0; r < table->rowCount(); ++r) {
+                if (filter == "All") {
+                    table->setRowHidden(r, false);
+                } else {
+                    auto* item = table->item(r, 0);
+                    if (!item) continue;
+                    QString action = item->text().toLower();
+                    if (filter == "Moved") {
+                        table->setRowHidden(r, !action.startsWith("move"));
+                    } else if (filter == "Deleted") {
+                        table->setRowHidden(r, !action.startsWith("delete"));
+                    }
+                }
+            }
+        });
         
         auto* btn_layout = new QHBoxLayout();
         btn_layout->addStretch();

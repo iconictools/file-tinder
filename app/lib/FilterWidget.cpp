@@ -9,6 +9,7 @@
 #include <QGroupBox>
 #include <QMessageBox>
 #include <QFrame>
+#include <QRegularExpression>
 
 // ============================================================================
 // CustomExtensionDialog
@@ -17,7 +18,7 @@
 CustomExtensionDialog::CustomExtensionDialog(QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle("Specify Extensions");
+    setWindowTitle("Custom File Extensions");
     setMinimumSize(ui::scaling::scaled(300), ui::scaling::scaled(250));
 
     auto* layout = new QVBoxLayout(this);
@@ -31,12 +32,15 @@ CustomExtensionDialog::CustomExtensionDialog(QWidget* parent)
     extension_input_ = new QLineEdit();
     extension_input_->setPlaceholderText("e.g., txt, pdf, docx");
     add_btn_ = new QPushButton("Add");
+    add_btn_->setStyleSheet("QPushButton { background-color: #3498db; color: white; padding: 4px 12px; border-radius: 3px; }"
+                          "QPushButton:hover { background-color: #2980b9; }");
     input_row->addWidget(extension_input_);
     input_row->addWidget(add_btn_);
     layout->addLayout(input_row);
 
     // Extension list
     extension_list_ = new QListWidget();
+    extension_list_->setStyleSheet("QListWidget { border: 1px solid #555; border-radius: 3px; }");
     layout->addWidget(extension_list_);
 
     // Remove button
@@ -55,20 +59,26 @@ CustomExtensionDialog::CustomExtensionDialog(QWidget* parent)
     // Connections
     connect(add_btn_, &QPushButton::clicked, this, [this]() {
         QString ext = extension_input_->text().trimmed().toLower();
-        if (!ext.isEmpty()) {
-            // Remove leading dot if present
-            if (ext.startsWith('.')) {
-                ext = ext.mid(1);
-            }
-            // Check if already exists
-            for (int i = 0; i < extension_list_->count(); ++i) {
-                if (extension_list_->item(i)->text() == ext) {
-                    return;
-                }
-            }
-            extension_list_->addItem(ext);
-            extension_input_->clear();
+        if (ext.isEmpty()) return;
+
+        if (ext.contains(' ') || ext.length() > 10) {
+            return; // Invalid extension
         }
+
+        QStringList parts = ext.split(QRegularExpression("[,;\\s]+"), Qt::SkipEmptyParts);
+        for (QString& part : parts) {
+            part = part.trimmed();
+            if (part.startsWith('.')) part = part.mid(1);
+            if (!part.isEmpty() && part.length() <= 10 && !part.contains(' ')) {
+                // Check for duplicates
+                bool found = false;
+                for (int i = 0; i < extension_list_->count(); ++i) {
+                    if (extension_list_->item(i)->text() == part) { found = true; break; }
+                }
+                if (!found) extension_list_->addItem(part);
+            }
+        }
+        extension_input_->clear();
     });
 
     connect(extension_input_, &QLineEdit::returnPressed, add_btn_, &QPushButton::click);
