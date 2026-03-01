@@ -381,7 +381,7 @@ void AdvancedFileTinderDialog::setup_file_info_panel() {
     file_name_label_ = new QLabel("No file selected");
     file_name_label_->setStyleSheet("font-size: 14px; font-weight: bold; color: #ecf0f1;");
     file_name_label_->setCursor(Qt::PointingHandCursor);
-    file_name_label_->setToolTip("Double-click to open file");
+    file_name_label_->setToolTip("Double-click to open file. Right-click for options.");
     file_name_label_->installEventFilter(this);
     text_layout->addWidget(file_name_label_);
     
@@ -436,6 +436,7 @@ void AdvancedFileTinderDialog::setup_quick_access_panel() {
     connect(quick_access_list_, &QListWidget::itemClicked,
             this, &AdvancedFileTinderDialog::on_quick_access_clicked);
     // Middle-click to remove items from Quick Access
+    quick_access_list_->setToolTip("Click to assign file. Middle-click to remove.");
     quick_access_list_->viewport()->installEventFilter(this);
     qa_layout->addWidget(quick_access_list_, 1);
     

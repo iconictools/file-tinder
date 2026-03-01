@@ -116,6 +116,15 @@ private:
             p.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
         }
         QApplication::setPalette(p);
+        if (is_dark_theme_) {
+            qApp->setStyleSheet(
+                "QToolTip { background-color: #2d2d2d; color: #e6e6e6; border: 1px solid #555; }"
+            );
+        } else {
+            qApp->setStyleSheet(
+                "QToolTip { background-color: #f5f5f5; color: #333; border: 1px solid #ccc; }"
+            );
+        }
     }
     
     bool eventFilter(QObject* obj, QEvent* event) override {
@@ -215,6 +224,7 @@ private:
             // Middle-click to remove
             recent_list->viewport()->installEventFilter(this);
             recent_list_ = recent_list;
+            recent_list_->setToolTip("Click to select. Middle-click to remove.");
             root_layout->addWidget(recent_list);
         }
         

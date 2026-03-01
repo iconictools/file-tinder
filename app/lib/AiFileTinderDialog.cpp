@@ -32,6 +32,8 @@
 #include <QScrollArea>
 #include <QFrame>
 #include <QDoubleSpinBox>
+#include <QStackedWidget>
+#include <QListWidget>
 
 // Batch size for API calls
 static const int kBatchSize = 50;
@@ -1175,12 +1177,54 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
             rv_header->setWordWrap(true);
             rv_layout->addWidget(rv_header);
 
+            auto* mode_toggle = new QPushButton("Switch to List View");
+            mode_toggle->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 8px; }");
+            rv_layout->addWidget(mode_toggle);
+
+            auto* stacked = new QStackedWidget();
+
             auto* folder_edit = new QTextEdit();
             QStringList sorted_folders = new_folders.values();
             sorted_folders.sort();
             folder_edit->setPlainText(sorted_folders.join("\n"));
             folder_edit->setStyleSheet("QTextEdit { background: #1a1a2e; color: #e0e0e0; font-family: monospace; font-size: 11px; }");
-            rv_layout->addWidget(folder_edit, 1);
+            stacked->addWidget(folder_edit);
+
+            auto* folder_list = new QListWidget();
+            folder_list->setStyleSheet("QListWidget { background: #1a1a2e; color: #e0e0e0; font-size: 11px; }");
+            folder_list->setDragDropMode(QAbstractItemView::InternalMove);
+            for (const QString& f : sorted_folders) {
+                auto* item = new QListWidgetItem(f);
+                item->setFlags(item->flags() | Qt::ItemIsEditable);
+                folder_list->addItem(item);
+            }
+            stacked->addWidget(folder_list);
+            stacked->setCurrentIndex(0);
+            rv_layout->addWidget(stacked, 1);
+
+            connect(mode_toggle, &QPushButton::clicked, [stacked, mode_toggle, folder_edit, folder_list]() {
+                if (stacked->currentIndex() == 0) {
+                    folder_list->clear();
+                    QStringList lines = folder_edit->toPlainText().split('\n', Qt::SkipEmptyParts);
+                    for (const QString& line : lines) {
+                        if (!line.trimmed().isEmpty()) {
+                            auto* item = new QListWidgetItem(line.trimmed());
+                            item->setFlags(item->flags() | Qt::ItemIsEditable);
+                            folder_list->addItem(item);
+                        }
+                    }
+                    stacked->setCurrentIndex(1);
+                    mode_toggle->setText("Switch to Text View");
+                } else {
+                    QStringList lines;
+                    for (int i = 0; i < folder_list->count(); ++i) {
+                        lines << folder_list->item(i)->text();
+                    }
+                    folder_edit->setPlainText(lines.join("\n"));
+                    stacked->setCurrentIndex(0);
+                    mode_toggle->setText("Switch to List View");
+                }
+            });
 
             auto* rv_note = new QLabel("One folder path per line. Empty lines will be ignored.");
             rv_note->setStyleSheet("color: #95a5a6; font-size: 10px;");
@@ -1199,15 +1243,24 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
 
             if (review_dlg.exec() == QDialog::Accepted) {
                 new_folders.clear();
-                QStringList lines = folder_edit->toPlainText().split('\n', Qt::SkipEmptyParts);
+                QStringList lines;
+                if (stacked->currentIndex() == 0) {
+                    lines = folder_edit->toPlainText().split('\n', Qt::SkipEmptyParts);
+                } else {
+                    for (int i = 0; i < folder_list->count(); ++i) {
+                        lines << folder_list->item(i)->text();
+                    }
+                }
+                QSet<QString> seen;
                 for (const QString& line : lines) {
                     QString trimmed = line.trimmed();
-                    if (!trimmed.isEmpty() && trimmed != source_folder_) {
-                        if (!trimmed.startsWith(source_folder_)) {
-                            trimmed = QDir::cleanPath(source_folder_ + "/" + trimmed);
-                        }
-                        new_folders.insert(trimmed);
+                    if (trimmed.isEmpty() || trimmed == source_folder_) continue;
+                    if (seen.contains(trimmed)) continue;
+                    seen.insert(trimmed);
+                    if (!trimmed.startsWith(source_folder_)) {
+                        trimmed = QDir::cleanPath(source_folder_ + "/" + trimmed);
                     }
+                    new_folders.insert(trimmed);
                 }
             }
             log(QString("Categories after review: %1 folder(s)").arg(new_folders.size()));
