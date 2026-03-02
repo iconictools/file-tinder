@@ -1509,7 +1509,7 @@ QString AiFileTinderDialog::send_api_request(const QString& prompt, QString& err
         }
 
         // Success — decay 429 counter (gradual recovery instead of hard reset)
-        if (consecutive_429s_ > 0) consecutive_429s_--;
+        consecutive_429s_ = qMax(0, consecutive_429s_ - 1);
 
         QByteArray response_data = reply->readAll();
         reply->deleteLater();
@@ -1726,6 +1726,23 @@ void AiFileTinderDialog::show_current_file() {
                     break;
                 }
             }
+        }
+    }
+
+    // Show AI reasoning for current file (all modes)
+    if (ai_reasoning_label_) {
+        int file_idx = get_current_file_index();
+        bool found = false;
+        for (const auto& s : suggestions_) {
+            if (s.file_index == file_idx && !s.reasoning.isEmpty()) {
+                ai_reasoning_label_->setText(QString("AI: %1").arg(s.reasoning));
+                ai_reasoning_label_->setVisible(true);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ai_reasoning_label_->setVisible(false);
         }
     }
 }

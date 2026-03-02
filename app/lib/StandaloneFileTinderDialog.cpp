@@ -1350,6 +1350,14 @@ void StandaloneFileTinderDialog::show_review_summary() {
     if (windowTitle().contains("AI Mode")) mode_name = "AI";
     else if (windowTitle().contains("Advanced")) mode_name = "Advanced";
     
+    // Performance note for large file sets
+    if (files_.size() > 500) {
+        auto* perf_note = new QLabel(QString("Loading %1 files...").arg(files_.size()));
+        perf_note->setStyleSheet("color: #f39c12; font-size: 10px;");
+        layout->addWidget(perf_note);
+        QApplication::processEvents();
+    }
+
     // Populate only files with non-pending decisions
     int visible_row = 0;
     std::vector<int> row_to_file_idx;
