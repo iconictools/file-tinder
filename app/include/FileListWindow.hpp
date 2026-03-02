@@ -32,6 +32,7 @@ public:
 signals:
     void file_selected(int filtered_index);
     void files_assigned(const QList<int>& file_indices, const QString& destination);
+    void files_decision_changed(const QList<int>& file_indices, const QString& decision);
 
 private:
     void build_ui();

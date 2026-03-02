@@ -68,29 +68,48 @@ void FileListWindow::build_ui() {
     list_widget_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(list_widget_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         auto selected = list_widget_->selectedItems();
-        if (selected.isEmpty() || destination_folders_.isEmpty()) return;
+        if (selected.isEmpty()) return;
 
         QMenu menu(this);
-        auto* header = menu.addAction("Move selected to:");
-        header->setEnabled(false);
+
+        // Decision changes
+        auto* dec_header = menu.addAction("Set decision:");
+        dec_header->setEnabled(false);
+        auto* keep_action = menu.addAction("Keep");
+        keep_action->setData("keep");
+        auto* delete_action = menu.addAction("Delete");
+        delete_action->setData("delete");
+        auto* skip_action = menu.addAction("Skip");
+        skip_action->setData("skip");
         menu.addSeparator();
 
-        for (const QString& folder : destination_folders_) {
-            QString display = QFileInfo(folder).fileName();
-            if (display.isEmpty()) display = folder;
-            auto* action = menu.addAction(display);
-            action->setData(folder);
-            action->setToolTip(folder);
+        // Folder assignment
+        if (!destination_folders_.isEmpty()) {
+            auto* assign_header = menu.addAction("Move to folder:");
+            assign_header->setEnabled(false);
+            for (const QString& folder : destination_folders_) {
+                QString display = QFileInfo(folder).fileName();
+                if (display.isEmpty()) display = folder;
+                auto* action = menu.addAction("  " + display);
+                action->setData("move:" + folder);
+                action->setToolTip(folder);
+            }
         }
 
         auto* chosen = menu.exec(list_widget_->viewport()->mapToGlobal(pos));
-        if (chosen && chosen->data().isValid()) {
-            QList<int> indices;
-            for (auto* item : selected) {
-                int fi = item->data(kFileIndexRole).toInt();
-                indices.append(fi);
-            }
-            emit files_assigned(indices, chosen->data().toString());
+        if (!chosen || !chosen->data().isValid()) return;
+
+        QList<int> indices;
+        for (auto* item : selected) {
+            int fi = item->data(kFileIndexRole).toInt();
+            indices.append(fi);
+        }
+
+        QString data = chosen->data().toString();
+        if (data.startsWith("move:")) {
+            emit files_assigned(indices, data.mid(5));
+        } else {
+            emit files_decision_changed(indices, data);
         }
     });
 

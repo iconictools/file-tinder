@@ -425,8 +425,8 @@ LAYOUT & VISUAL HIERARCHY
   - No visual grouping by destination folder — files assigned to the same
     folder are scattered throughout the table sorted by their original
     scan order.
-  - Destination combo shows folder basenames only — two folders named
-    "Images" in different paths would be ambiguous.
+  + [FIXED] Destination combo disambiguates same-named folders by showing
+    parent directory (e.g., "project1/Images" vs "project2/Images").
   - Mode column exists but is mostly redundant in single-mode sessions —
     only useful when switching between Basic/Advanced/AI mid-session.
   - No drag-and-drop reordering or reassignment.
@@ -445,7 +445,8 @@ FEATURES
     created, files targeting it are skipped with user confirmation.
   + Copy execution (QFile::copy) runs before the executor for move/delete.
   + [FIXED] Hover preview toggle added for files in the review table.
-  - No size information in the table — can't identify large files.
+  + [FIXED] Size column added — shows human-readable file sizes for
+    identifying large files.
   - No "undo all" or "revert to pending" for a subset of files.
   + [FIXED] Keyboard shortcut hints added for navigation within the review
     table.
@@ -533,8 +534,9 @@ FEATURES
   + Destination folders provided via set_destination_folders().
   - No drag-and-drop FROM the list TO folder buttons — must use context
     menu.
-  - No way to change decisions from the list (only assignment via
-    right-click).
+  + [FIXED] Right-click context menu now includes Keep/Delete/Skip decision
+    options in addition to folder assignment — decisions changeable from
+    the list without returning to main window.
   - File list reconstructs entirely on every update (clear + rebuild) —
     could be expensive for large file sets.
   - Each right-click context menu shows ALL destination folders — no

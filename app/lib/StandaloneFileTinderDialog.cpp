@@ -514,6 +514,22 @@ void StandaloneFileTinderDialog::setup_ui() {
             update_stats();
             show_current_file();
         });
+        connect(flw, &FileListWindow::files_decision_changed, this, [this](const QList<int>& indices, const QString& decision) {
+            for (int fi : indices) {
+                if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                    auto& file = files_[fi];
+                    QString old_decision = file.decision;
+                    if (old_decision == decision) continue;
+                    update_decision_count(old_decision, -1);
+                    file.decision = decision;
+                    update_decision_count(decision, 1);
+                    record_action(fi, old_decision, decision, file.destination_folder);
+                }
+            }
+            update_progress();
+            update_stats();
+            show_current_file();
+        });
         flw->set_destination_folders(get_destination_folders());
         flw->show();
     });
@@ -1322,8 +1338,8 @@ void StandaloneFileTinderDialog::show_review_summary() {
     layout->addLayout(bulk_bar);
     
     auto* table = new QTableWidget();
-    table->setColumnCount(4);
-    table->setHorizontalHeaderLabels({"File", "Decision", "Destination", "Mode"});
+    table->setColumnCount(5);
+    table->setHorizontalHeaderLabels({"File", "Size", "Decision", "Destination", "Mode"});
     table->horizontalHeader()->setStretchLastSection(true);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     
@@ -1391,21 +1407,36 @@ void StandaloneFileTinderDialog::show_review_summary() {
         name_item->setForeground(row_color);
 
         table->setItem(visible_row, 0, name_item);
+
+        // Size column
+        auto* size_item = new QTableWidgetItem(QLocale().formattedDataSize(file.size, 1, QLocale::DataSizeTraditionalFormat));
+        size_item->setFlags(size_item->flags() & ~Qt::ItemIsEditable);
+        size_item->setData(Qt::UserRole, file.size);  // for sorting
+        table->setItem(visible_row, 1, size_item);
         
         // Decision (editable via combo box)
         auto* combo = new QComboBox();
         combo->addItems({"keep", "delete", "skip", "move", "copy", "pending"});
         combo->setCurrentText(file.decision);
-        table->setCellWidget(visible_row, 1, combo);
+        table->setCellWidget(visible_row, 2, combo);
         
         // Destination (editable dropdown — type paths or select from grid/AI suggestions)
         auto* dest_combo = new QComboBox();
         dest_combo->setEditable(true);
         dest_combo->addItem("(none)", QString());
-        // Add grid folders
+        // Add grid folders with disambiguated labels
         QStringList grid_folders = get_destination_folders();
+        // Count basenames to detect ambiguity
+        QMap<QString, int> basename_counts;
+        for (const QString& fp : grid_folders)
+            basename_counts[QFileInfo(fp).fileName()]++;
         for (const QString& fp : grid_folders) {
-            QString label = QFileInfo(fp).fileName();
+            QString basename = QFileInfo(fp).fileName();
+            QString label = basename;
+            if (basename_counts.value(basename, 0) > 1) {
+                // Disambiguate: show parent/name
+                label = QFileInfo(fp).dir().dirName() + "/" + basename;
+            }
             if (!QDir(fp).exists()) label += " [virtual]";
             dest_combo->addItem(label, fp);
         }
@@ -1423,7 +1454,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
             }
         }
         dest_combo->setToolTip("Type a folder path or select from dropdown. Relative paths are under the source folder.");
-        table->setCellWidget(visible_row, 2, dest_combo);
+        table->setCellWidget(visible_row, 3, dest_combo);
         
         // Mode column: moves with destinations from Advanced/AI modes; others from current mode
         QString mode_for_row = mode_name;
@@ -1433,7 +1464,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
         }
         auto* mode_item = new QTableWidgetItem(mode_for_row);
         mode_item->setFlags(mode_item->flags() & ~Qt::ItemIsEditable);
-        table->setItem(visible_row, 3, mode_item);
+        table->setItem(visible_row, 4, mode_item);
         
         visible_row++;
     }
@@ -1465,19 +1496,19 @@ void StandaloneFileTinderDialog::show_review_summary() {
     // Connect bulk action buttons
     connect(bulk_keep_btn, &QPushButton::clicked, this, [table]() {
         for (int r = 0; r < table->rowCount(); ++r) {
-            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 1));
+            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 2));
             if (combo) combo->setCurrentText("keep");
         }
     });
     connect(bulk_skip_btn, &QPushButton::clicked, this, [table]() {
         for (int r = 0; r < table->rowCount(); ++r) {
-            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 1));
+            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 2));
             if (combo) combo->setCurrentText("skip");
         }
     });
     connect(bulk_pending_btn, &QPushButton::clicked, this, [table]() {
         for (int r = 0; r < table->rowCount(); ++r) {
-            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 1));
+            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 2));
             if (combo) combo->setCurrentText("pending");
         }
     });
@@ -1488,7 +1519,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
                 table->setRowHidden(row, false);
                 continue;
             }
-            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(row, 1));
+            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(row, 2));
             if (combo) {
                 bool match = combo->currentText().compare(filter, Qt::CaseInsensitive) == 0;
                 table->setRowHidden(row, !match);
@@ -1534,7 +1565,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
     connect(execute_btn, &QPushButton::clicked, &summary_dialog, [&, table]() {
         // Apply any edits from combo boxes back to files_
         for (int r = 0; r < table->rowCount() && r < static_cast<int>(row_to_file_idx.size()); ++r) {
-            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 1));
+            auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 2));
             if (!combo) continue;
             
             int file_idx = row_to_file_idx[r];
@@ -1542,7 +1573,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
             QString new_decision = combo->currentText();
             
             // Read destination from dest combo
-            auto* dest_combo = qobject_cast<QComboBox*>(table->cellWidget(r, 2));
+            auto* dest_combo = qobject_cast<QComboBox*>(table->cellWidget(r, 3));
             QString new_dest;
             if (dest_combo) {
                 new_dest = dest_combo->currentData().toString();
