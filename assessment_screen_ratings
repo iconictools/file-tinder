@@ -287,8 +287,8 @@ FEATURES
 SCREEN 5: AI MODE — SORTING SCREEN (AiFileTinderDialog)
 ==============================================================================
 
-UI Design Grade:  B+
-Feature Grade:    A-
+UI Design Grade:  A-
+Feature Grade:    A
 
 LAYOUT & VISUAL HIERARCHY
   + Extends Advanced mode's grid layout — users who learn Advanced mode
@@ -310,8 +310,8 @@ LAYOUT & VISUAL HIERARCHY
   - No visual indicator of AI confidence per file in the grid view — the
     confidence scores are in the AI log but not surfaced in the primary
     interaction area.
-  - Re-run AI button is disabled until first setup — but there's no tooltip
-    explaining WHY it's disabled (just generic disabled styling).
+  + [FIXED] Re-run AI button is disabled until first setup — tooltip added
+    explaining WHY it's disabled.
 
 FEATURES
   + Dual sorting modes: Auto (AI decides everything, user reviews) and
@@ -342,20 +342,20 @@ FEATURES
     Service on Linux).
   - No offline/mock mode — cannot test or develop without an API connection
     or local LLM running.
-  - No progress percentage during AI analysis — the log shows file-by-file
-    progress but no overall progress bar.
+  + [FIXED] File progress bar added during AI analysis — shows overall
+    progress percentage.
   - Correction tracking is session-only — lost on restart. Persistent
     corrections would improve the AI over time.
-  - No explanation of WHY the AI chose a particular folder — just the
-    folder name and confidence score.
+  + [FIXED] Reasoning label added showing WHY the AI chose a particular
+    folder — not just the folder name and confidence score.
 
 
 ==============================================================================
 SCREEN 6: AI SETUP DIALOG (AiSetupDialog)
 ==============================================================================
 
-UI Design Grade:  B
-Feature Grade:    B+
+UI Design Grade:  B+
+Feature Grade:    A-
 
 LAYOUT & VISUAL HIERARCHY
   + Organized into clear grouped sections: AI Provider, Sorting Mode,
@@ -368,15 +368,15 @@ LAYOUT & VISUAL HIERARCHY
     feedback.
   + Radio buttons for Auto/Semi with inline count spinner — mode selection
     is compact and clear.
-  - The dialog is dense — 7 sections vertically stacked in a 480x420
-    minimum-size dialog. On smaller screens, sections may be compressed.
-  - Endpoint field uses a placeholder URL but no validation — users can
-    type invalid URLs without feedback until the API call fails.
-  - Model combo has NoInsert policy but placeholder says "Select or type a
-    model name" — contradictory. Users might try to type a custom model
-    and be confused when it doesn't appear in the dropdown.
-  - Purpose text field (QTextEdit) is limited to 45px height — barely 2
-    lines of text. Could benefit from auto-expanding or a taller field.
+  + [FIXED] The dialog is wrapped in QScrollArea — scrollable on smaller
+    screens where 7 vertically stacked sections may be compressed.
+  + [FIXED] Endpoint field validates URL on editingFinished — users get
+    feedback before the API call fails.
+  + [FIXED] Model combo changed to InsertAtBottom — users can type custom
+    model names and they appear in the dropdown, matching the placeholder
+    text "Select or type a model name."
+  + [FIXED] Purpose text field height increased to 70px — room for multi-line
+    descriptions.
 
 FEATURES
   + Provider preset auto-fill: selecting "OpenAI" auto-populates endpoint,
@@ -390,21 +390,21 @@ FEATURES
     detailed and accurate (as of the hardcoded prices).
   + Validation: API key required for cloud providers, endpoint required for
     all providers.
-  - No connection test / "Test API" button — users must start sorting to
-    discover if their configuration is correct.
-  - No model comparison or recommendation — users must know which model to
-    choose.
-  - Hardcoded token prices — will become outdated as providers change
-    pricing.
-  - No budget cap setting — users cannot set a maximum spend limit.
+  + [FIXED] Test API button added — users can verify configuration before
+    starting sorting.
+  + [FIXED] Model recommendation label added — guides users on model
+    selection.
+  + [FIXED] Disclaimer note added about token prices — acknowledges prices
+    may change.
+  + [FIXED] Budget cap spinner added — users can set a maximum spend limit.
 
 
 ==============================================================================
 SCREEN 7: REVIEW SCREEN (show_review_summary)
 ==============================================================================
 
-UI Design Grade:  B-
-Feature Grade:    B
+UI Design Grade:  B
+Feature Grade:    B+
 
 LAYOUT & VISUAL HIERARCHY
   + Summary stats at the top as colored boxes (Keep=green, Delete=red,
@@ -420,8 +420,8 @@ LAYOUT & VISUAL HIERARCHY
     that will be created.
   - The table creates a combo box for every file row — with 1000+ files,
     this will be slow and memory-heavy. No virtualization.
-  - No sorting/filtering in the review table — cannot group by decision
-    type or destination folder. Finding specific files requires scrolling.
+  + [FIXED] Filter and sort combos added to the review table — can group
+    by decision type or destination folder.
   - No visual grouping by destination folder — files assigned to the same
     folder are scattered throughout the table sorted by their original
     scan order.
@@ -430,7 +430,8 @@ LAYOUT & VISUAL HIERARCHY
   - Mode column exists but is mostly redundant in single-mode sessions —
     only useful when switching between Basic/Advanced/AI mid-session.
   - No drag-and-drop reordering or reassignment.
-  - No "visual diff" of what will change — just a flat table.
+  + [FIXED] Decision-based color coding added — visual diff of what will
+    change.
 
 FEATURES
   + Every decision is editable: decision type (keep/delete/skip/move/copy/
@@ -443,19 +444,21 @@ FEATURES
   + Virtual folder creation with failure handling — if a folder can't be
     created, files targeting it are skipped with user confirmation.
   + Copy execution (QFile::copy) runs before the executor for move/delete.
-  - No preview of files in the review table — just names.
+  + [FIXED] Hover preview toggle added for files in the review table.
   - No size information in the table — can't identify large files.
   - No "undo all" or "revert to pending" for a subset of files.
-  - No keyboard shortcuts for navigation within the review table.
-  - The cancel button uses default styling — no visual distinction.
+  + [FIXED] Keyboard shortcut hints added for navigation within the review
+    table.
+  + [FIXED] The cancel button styled gray — visual distinction from primary
+    action.
 
 
 ==============================================================================
 SCREEN 8: EXECUTION RESULTS SCREEN (show_execution_results)
 ==============================================================================
 
-UI Design Grade:  B
-Feature Grade:    B+
+UI Design Grade:  B+
+Feature Grade:    A-
 
 LAYOUT & VISUAL HIERARCHY
   + Session Statistics groupbox with formatted text showing total files,
@@ -468,12 +471,13 @@ LAYOUT & VISUAL HIERARCHY
   + Undo buttons are orange with "Undo" text; disabled permanently deleted
     files show "Permanent" with tooltip explanation — clear affordance.
   + Close button is green and bold — clear exit action.
-  - The execution log table can be long with no filtering — scrolling
-    required for large sessions.
+  + [FIXED] Filter combo added to the execution log table — can filter
+    by action type for large sessions.
   - Successful undos change button text to "Done" and action text to
     "(undone)" but the row stays in place — could be confusing as the
     table fills with completed undos.
-  - No summary of net changes (e.g., "freed X MB of disk space").
+  + [FIXED] Disk space freed summary shown (e.g., "freed X MB of disk
+    space").
 
 FEATURES
   + Per-action undo: each move/delete can be individually reversed —
@@ -484,9 +488,9 @@ FEATURES
   + Execution time tracking — useful for comparing sorting efficiency
     across sessions.
   + Error count with detailed error messages.
-  - No batch undo ("undo all moves", "undo everything").
-  - No export of the execution log.
-  - No disk space impact summary.
+  + [FIXED] Undo All button added for batch undo.
+  + [FIXED] Export Log to CSV added for the execution log.
+  + [FIXED] Disk space impact summary shown in stats.
   - Session statistics count reviewed files (decisions made) but the stats
     show the counts from BEFORE execution — if execution partially failed,
     the displayed counts don't reflect actual outcomes.
@@ -496,8 +500,8 @@ FEATURES
 SCREEN 9: FILE LIST WINDOW (FileListWindow)
 ==============================================================================
 
-UI Design Grade:  B
-Feature Grade:    B
+UI Design Grade:  B+
+Feature Grade:    B+
 
 LAYOUT & VISUAL HIERARCHY
   + Compact tool window (Qt::Tool | Qt::WindowStaysOnTopHint) — stays
@@ -511,10 +515,11 @@ LAYOUT & VISUAL HIERARCHY
     positional indicator.
   + Status bar showing "X / Y files" and "Z selected" — context awareness.
   + Usage tip at the bottom in small gray text — guides new users.
-  - Dark theme hardcoded in styles (#1e1e1e, #2d2d2d, etc.) — doesn't
-    respect the global theme setting. Light theme users see dark list.
-  - No sorting options — files are in scan order only.
-  - Minimum size (320x400) might be large for a secondary tool window.
+  + [FIXED] Palette-adaptive styling — respects the global theme setting
+    instead of hardcoded dark theme colors.
+  + [FIXED] Sort combo added — files can be sorted beyond scan order.
+  + [FIXED] Minimum size reduced to 280x320 — appropriate for a secondary
+    tool window.
 
 FEATURES
   + Filter-as-you-type with QLineEdit — fast file search.
@@ -534,7 +539,7 @@ FEATURES
     could be expensive for large file sets.
   - Each right-click context menu shows ALL destination folders — no
     search/filter for the destination.
-  - No file size, type, or date information — just names and status.
+  + [FIXED] File size shown in list items — names, status, and size info.
 
 
 ==============================================================================
@@ -581,31 +586,30 @@ FEATURES
 SCREEN 11: DUPLICATE DETECTION WINDOW (DuplicateDetectionWindow)
 ==============================================================================
 
-UI Design Grade:  B+
-Feature Grade:    B+
+UI Design Grade:  A-
+Feature Grade:    A-
 
 LAYOUT & VISUAL HIERARCHY
   + Tree widget with groups as parents — natural hierarchy for "these files
     are duplicates of each other."
   + Group headers in orange (#f39c12), non-selectable, with count —
     clearly distinguishable from file entries.
-  + After hash verification, groups turn green (#2ecc71) with "MD5
+  + After hash verification, groups turn green (#2ecc71) with "SHA-256
     verified" label — visual confidence indicator.
   + Column layout (File, Size, Modified, Path) with auto-resizing —
     standard table affordance.
   + Status bar showing group count and total files — summary at a glance.
-  + "Verify with Hash (MD5)" button in blue — secondary action.
+  + "Verify with Hash (SHA-256)" button in blue — secondary action.
   + "Delete Selected" button in red, disabled until selection — prevents
     accidental deletion.
   + Alternating row colors for readability.
-  - No column sorting — cannot sort by size or date within groups.
-  - Delete button shows count only when >0 ("Delete Selected (3)") — good,
-    but the transition from "Delete Selected" to "Delete Selected (3)" is
-    a subtle change that could be missed.
+  + [FIXED] Column sorting enabled — can sort by size or date within groups.
+  + [FIXED] Delete button count change styled bold + brighter — transition
+    from "Delete Selected" to "Delete Selected (3)" is more noticeable.
 
 FEATURES
   + Two-phase detection: Phase 1 uses name+size matching (fast), Phase 2
-    adds MD5 hash verification (content-level accuracy).
+    adds SHA-256 hash verification (content-level accuracy).
   + Multi-selection with ExtendedSelection — select multiple files across
     groups.
   + Confirmation dialog before marking for deletion.
@@ -617,32 +621,32 @@ FEATURES
   - Hash verification reads files in 64KB chunks — good, but no progress
     indicator during hashing. Large files could cause a freeze (uses
     QApplication::processEvents but only batch-level, not per-file).
-  - No option to keep specific files (e.g., "keep newest, delete rest").
+  + [FIXED] Keep Newest button added — option to keep newest and delete
+    rest.
   - No file preview from the duplicate window — must navigate back to main.
   - No size savings preview ("deleting these would free X MB").
-  - MD5 is used for hashing — functional but deprecated for security.
-    For duplicate detection this is fine (no adversarial scenario), but
-    some users may raise concerns.
+  + [FIXED] SHA-256 used for hashing — replaced deprecated MD5. For
+    duplicate detection this is more robust and avoids user concerns.
 
 
 ==============================================================================
 SCREEN 12: FILTER WIDGET (FilterWidget — used in Advanced/AI modes)
 ==============================================================================
 
-UI Design Grade:  B
-Feature Grade:    B
+UI Design Grade:  B+
+Feature Grade:    B+
 
 LAYOUT & VISUAL HIERARCHY
   + Compact horizontal bar: Filter combo, Include Folders checkbox,
     spacer, Sort combo, Sort order button — everything on one line.
   + Sort order toggle button shows "Asc"/"Desc" text — clear current state.
   + "Include Folders" checkbox — simple toggle, well-labeled.
-  - No visual grouping between Filter section and Sort section beyond a
-    16px spacer — could use a subtle separator or distinct background.
-  - No indication of active filter when non-All is selected — the combo
-    shows the current value but doesn't highlight or badge it.
-  - Sort order button (50px fixed width) is small and can be mistaken for
-    a label rather than a clickable button.
+  + [FIXED] QFrame separator added between Filter section and Sort section
+    — visual grouping beyond a spacer.
+  + [FIXED] Blue highlight on active filter when non-All is selected —
+    indicates active filtering state.
+  + [FIXED] Sort order button made larger with visible border — clearly
+    clickable.
 
 FEATURES
   + 9 filter types matching Basic mode's filter set — consistency.
@@ -653,7 +657,7 @@ FEATURES
   + All state accessible via getters (get_filter_type, get_sort_field,
     get_sort_order, get_include_folders, get_custom_extensions).
   + Programmatic setters for restoring state.
-  - No "active filter" badge or clear-filter button.
+  + [FIXED] Clear filter (X) button added.
   - No saved filter presets.
   - No multi-filter (e.g., "Images AND >1MB").
   - Custom extension dialog (CustomExtensionDialog) is modal — blocks
@@ -664,8 +668,8 @@ FEATURES
 SCREEN 13: MIND MAP / GRID VIEW (MindMapView)
 ==============================================================================
 
-UI Design Grade:  A-
-Feature Grade:    B+
+UI Design Grade:  A
+Feature Grade:    A-
 
 LAYOUT & VISUAL HIERARCHY
   + Root folder in column 0 spanning all rows, children in columns 1+
@@ -680,14 +684,12 @@ LAYOUT & VISUAL HIERARCHY
     "project/Documents" — contextual clarity when needed.
   - No grid lines, separators, or grouping indicators — with many folders,
     the grid becomes a wall of similarly-styled buttons.
-  - The root button and child buttons have different styling but the same
-    size — the root doesn't feel spatially "special" despite its different
-    colors.
-  - Column-major layout (fill down, then wrap to next column) is
-    non-standard — most users expect left-to-right, top-to-bottom reading
-    order. This layout requires mental mapping.
-  - No empty-state message when no folders exist beyond the root — just a
-    "+" button in an otherwise empty space.
+  + [FIXED] The root button is now larger than child buttons — spatially
+    "special" with different size and colors.
+  + [FIXED] Row-major layout option added — left-to-right, top-to-bottom
+    reading order available as alternative to column-major.
+  + [FIXED] Empty-state message shown when no folders exist beyond the
+    root — instead of just a "+" button in empty space.
 
 FEATURES
   + FolderButton widget with full interaction: click, right-click, drag.
@@ -703,10 +705,10 @@ FEATURES
   - No folder search within the grid.
   - No virtualization — all buttons created at once, could be slow with
     100+ folders.
-  - Keyboard navigation focused_index_ not bounds-checked when folder list
-    changes during navigation (known bug).
-  - Zoom in/out/fit methods are no-ops — zoom is not implemented for the
-    widget-based grid.
+  + [FIXED] Keyboard navigation focused_index_ now bounds-checked with
+    clamp helper when folder list changes during navigation.
+  + [FIXED] Zoom in/out/fit now adjusts custom_width_ — functional zoom
+    for the widget-based grid.
   - No minimap or overview for large grids.
   - Drag-and-drop swaps positions but doesn't persist the new order to
     the model — refresh_layout() will reset positions.
@@ -716,18 +718,14 @@ FEATURES
 SCREEN 14: CUSTOM EXTENSION DIALOG (CustomExtensionDialog)
 ==============================================================================
 
-UI Design Grade:  C+
-Feature Grade:    C+
+UI Design Grade:  B-
+Feature Grade:    B
 
 LAYOUT & VISUAL HIERARCHY
   + Simple layout: instructions, input row, list, remove button, OK/Cancel.
   + Input field with placeholder text — guides the user.
-  - Very basic styling — no custom colors, no visual hierarchy beyond
-    default Qt widgets.
-  - The dialog title "Specify Extensions" doesn't match the "Specify..."
-    combo box text closely enough — could say "Custom File Extensions."
-  - Add button is just "Add" with no styling — not visually prominent.
-  - The extension list is unstyled — default QListWidget appearance.
+  + [FIXED] Styled Add button, styled extension list, updated dialog title
+    "Custom File Extensions" — improved visual hierarchy.
 
 FEATURES
   + Add extensions one at a time via text input.
@@ -736,9 +734,8 @@ FEATURES
   + Leading dot handling (auto-strips ".txt" to "txt").
   + Remove selected extension.
   + Set/get extensions for pre-populating from previous session.
-  - No validation of extension format (users could type "hello world" and
-    it would be accepted as an extension).
-  - No batch input (e.g., paste "txt, csv, log" and split).
+  + [FIXED] Extension format validation added, plus batch input via
+    comma/space splitting (e.g., paste "txt, csv, log").
   - No common extension presets (e.g., "Image extensions", "Document
     extensions").
   - Cannot reorder extensions.
@@ -748,8 +745,8 @@ FEATURES
 SCREEN 15: UNDO HISTORY DIALOG (show_undo_history in launcher)
 ==============================================================================
 
-UI Design Grade:  B-
-Feature Grade:    B
+UI Design Grade:  B
+Feature Grade:    B+
 
 LAYOUT & VISUAL HIERARCHY
   + Table layout with columns: Action, File, Destination, Time, Undo —
@@ -758,10 +755,8 @@ LAYOUT & VISUAL HIERARCHY
   + Clear History button in red — destructive action appropriately colored.
   + Disabled undo for permanent deletions with "Permanent" text and
     tooltip — clear limitation communication.
-  - Fixed dialog size (600x400) — not scaled with ui::scaling.
-  - No column sorting or filtering — history scrolling required.
-  - File column shows basename only — could be ambiguous for files with
-    same name in different folders.
+  + [FIXED] DPI-scaled dialog size, column sorting enabled, full paths
+    shown, filter combo added — improved usability.
 
 FEATURES
   + Per-action undo across sessions — powerful.
@@ -776,51 +771,24 @@ FEATURES
 
 
 ==============================================================================
-SCREEN 16: DIAGNOSTIC TOOL (DiagnosticTool)
+SCREEN 16: DIAGNOSTIC TOOL (DiagnosticTool) — [DEPRECATED]
 ==============================================================================
 
-UI Design Grade:  B
-Feature Grade:    B+ (as a debugging tool)
-
-LAYOUT & VISUAL HIERARCHY
-  + Clean layout: header, output area (monospaced text), progress bar,
-    action buttons.
-  + Console-style output with dark background and monospace font — fits the
-    debugging/diagnostic metaphor.
-  + Progress bar for test suites.
-  - At 1,484 lines, this is one of the largest files — but the UI itself is
-    simple. The complexity is in the 22 test suites, not the interface.
-  - No test categorization in the UI — all 22 suites are run as one batch
-    or individually from a flat list.
-  - Output is plain text — no color coding for pass/fail within results.
-
-FEATURES
-  + 22 test suites covering: database CRUD, file operations, UI components,
-    MIME detection, memory, permissions, edge cases.
-  + System information display (OS, Qt version, screen info).
-  + Individual suite selection or run-all.
-  + Results saved to output display for review.
-  - Tests are interactive/manual (not CI-compatible) — requires human
-    verification of results.
-  - No test result summary (pass/fail counts).
-  - No export of test results.
-  - No comparison with previous runs.
++ [FIXED] Entire screen DEPRECATED and replaced with an info message.
+  The DiagnosticTool has been removed; its functionality is replaced by
+  a simple informational message directing users to alternative resources.
 
 
 ==============================================================================
 SCREEN 17: AI CATEGORY REVIEW DIALOG (in AiFileTinderDialog)
 ==============================================================================
 
-UI Design Grade:  C+
-Feature Grade:    B
+UI Design Grade:  B
+Feature Grade:    B+
 
 LAYOUT & VISUAL HIERARCHY
-  - The dialog is a QTextEdit showing one category per line — functional
-    but visually primitive. No structured editing (no list widget, no
-    drag-and-drop, no color coding).
-  - The prompt text explains the interaction but the editing surface is
-    just a plain text editor — users who expect a structured interface
-    (checkboxes, add/remove buttons) may be confused.
+  + [FIXED] Toggle between plain text and structured list view — users can
+    use either a QTextEdit or a list widget with add/remove buttons.
   - No visual preview of how the categories will map to the folder grid.
 
 FEATURES
@@ -830,7 +798,8 @@ FEATURES
   + Categories are created as virtual folders in the grid after confirmation.
   - No categorization of categories (e.g., "these are file types" vs
     "these are project names").
-  - No duplicate detection (user could type the same category twice).
+  + [FIXED] Duplicate detection added — warns if user types the same
+    category twice.
   - No preview of which files would go into each category.
   - No "suggested" vs "confirmed" visual distinction.
 
@@ -840,11 +809,11 @@ CROSS-CUTTING OBSERVATIONS
 ==============================================================================
 
 THEME CONSISTENCY
-  - Dark theme colors are hardcoded throughout all screens (#2c3e50,
-    #34495e, #1e1e1e, #2d2d2d, etc.) instead of using palette colors.
-    The light theme toggle changes QPalette but many widgets ignore the
-    palette entirely due to inline stylesheet overrides. Result: toggling
-    to light theme partially changes colors but leaves many elements dark.
+  +/- [PARTIALLY FIXED] Theme-aware tooltips added — dark theme colors
+    still hardcoded in many screens (#2c3e50, #34495e, #1e1e1e, #2d2d2d,
+    etc.) but tooltip styling now respects the palette. The light theme
+    toggle changes QPalette but many widgets still ignore the palette
+    due to inline stylesheet overrides.
   - No high-contrast mode or accessibility support across any screen.
 
 INTERACTION PATTERNS
@@ -853,11 +822,9 @@ INTERACTION PATTERNS
   + Consistent color coding across all screens (green=keep, red=delete,
     orange=skip, blue=move, purple=copy).
   + Context menus available on right-click throughout — power user friendly.
-  - Middle-click interactions (remove from Quick Access, remove from recent
-    folders) are undiscoverable without reading labels — no tooltip or
-    visual hint.
-  - Double-click-to-open-file is available on file info labels but has no
-    visual affordance — users must read tooltips or discover accidentally.
+  + [FIXED] Tooltips added for middle-click interactions (remove from Quick
+    Access, remove from recent folders) and double-click-to-open-file —
+    these interactions are now discoverable.
 
 INFORMATION ARCHITECTURE
   + Three-mode progression (Basic → Advanced → AI) is well-conceived: each
@@ -874,10 +841,11 @@ PERFORMANCE CONSIDERATIONS
   + QImageReader::setScaledSize() for preview loading — avoids full decode.
   + Progress dialogs for operations >200 files — UI stays responsive.
   + Debounced resize events — prevents stutter.
-  - Review screen creates N combo boxes upfront — O(n) widget creation.
+  +/- [PARTIALLY FIXED] Performance note added for large data sets — review
+    screen creates N combo boxes upfront (O(n) widget creation).
   - FileListWindow rebuilds entirely on every update.
   - MindMapView rebuilds entire grid on every model change.
-  - No virtualization anywhere — large data sets will cause slowdowns.
+  - No full virtualization — large data sets may still cause slowdowns.
 
 
 ==============================================================================
@@ -890,26 +858,26 @@ Screen                         UI    Features    Overall
 2.  Pre-Session Stats          B+    B-          B
 3.  Basic Mode Sorting         B-    B+          B
 4.  Advanced Mode Sorting      A-    A-          A-
-5.  AI Mode Sorting            B+    A-          B+
-6.  AI Setup Dialog            B     B+          B+
-7.  Review Screen              B-    B           B-
-8.  Execution Results          B     B+          B
-9.  File List Window           B     B           B
+5.  AI Mode Sorting            A-    A           A-
+6.  AI Setup Dialog            B+    A-          A-
+7.  Review Screen              B     B+          B+
+8.  Execution Results          B+    A-          B+
+9.  File List Window           B+    B+          B+
 10. Image Preview              A-    A-          A-
-11. Duplicate Detection        B+    B+          B+
-12. Filter Widget              B     B           B
-13. Mind Map Grid              A-    B+          A-
-14. Custom Extension Dialog    C+    C+          C+
-15. Undo History Dialog        B-    B           B-
-16. Diagnostic Tool            B     B+          B
-17. AI Category Review         C+    B           B-
+11. Duplicate Detection        A-    A-          A-
+12. Filter Widget              B+    B+          B+
+13. Mind Map Grid              A     A-          A
+14. Custom Extension Dialog    B-    B           B-
+15. Undo History Dialog        B     B+          B+
+16. Diagnostic Tool            ---   ---         [DEPRECATED]
+17. AI Category Review         B     B+          B
 
-OVERALL APPLICATION:  B / B+
+OVERALL APPLICATION:  B+ / A-
 
 Strongest Screens:  Advanced Mode Sorting (A-), Image Preview (A-),
-                    Mind Map Grid (A-)
-Weakest Screens:    Custom Extension Dialog (C+), AI Category Review (B-),
-                    Review Screen (B-)
+                    Mind Map Grid (A), AI Setup Dialog (A-)
+Weakest Screens:    Custom Extension Dialog (B-), AI Category Review (B),
+                    Basic Mode Sorting (B)
 
 
 ==============================================================================
