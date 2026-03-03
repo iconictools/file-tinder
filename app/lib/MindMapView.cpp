@@ -8,6 +8,8 @@
 #include <QMimeData>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QDragLeaveEvent>
+#include <QDataStream>
 #include <QFileInfo>
 #include <QFontMetrics>
 #include <QLabel>
@@ -21,6 +23,7 @@ FolderButton::FolderButton(FolderNode* node, QWidget* parent)
     setCursor(Qt::PointingHandCursor);
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     setFixedSize(ui::scaling::scaled(120), ui::scaling::scaled(28));
+    setAcceptDrops(true);
     update_display();
     update_style();
     
@@ -178,6 +181,38 @@ void FolderButton::mouseMoveEvent(QMouseEvent* event) {
     mime->setText(node_->path);
     drag->setMimeData(mime);
     drag->exec(Qt::MoveAction);
+}
+
+void FolderButton::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-filetinder-indices")) {
+        event->acceptProposedAction();
+        setStyleSheet(
+            "QPushButton { text-align: center; padding: 2px 6px; "
+            "background-color: #1a3d2a; border: 2px solid #2ecc71; "
+            "border-radius: 4px; color: #2ecc71; font-weight: bold; font-size: 10px; }"
+        );
+    }
+}
+
+void FolderButton::dragLeaveEvent(QDragLeaveEvent* event) {
+    Q_UNUSED(event);
+    update_style();
+}
+
+void FolderButton::dropEvent(QDropEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-filetinder-indices")) {
+        QByteArray encoded = event->mimeData()->data("application/x-filetinder-indices");
+        QDataStream stream(&encoded, QIODevice::ReadOnly);
+        QList<int> indices;
+        while (!stream.atEnd()) {
+            int idx;
+            stream >> idx;
+            indices.append(idx);
+        }
+        event->acceptProposedAction();
+        update_style();
+        emit files_dropped(node_->path, indices);
+    }
 }
 
 // === MindMapView Implementation ===
@@ -362,6 +397,7 @@ void MindMapView::place_folder_node(FolderNode* node) {
     
     connect(btn, &FolderButton::folder_clicked, this, &MindMapView::folder_clicked);
     connect(btn, &FolderButton::folder_right_clicked, this, &MindMapView::folder_context_menu);
+    connect(btn, &FolderButton::files_dropped, this, &MindMapView::files_dropped);
     
     // Advance position based on layout direction
     if (row_major_) {

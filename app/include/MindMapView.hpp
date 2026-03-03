@@ -32,11 +32,15 @@ signals:
     void folder_clicked(const QString& path);
     void folder_right_clicked(const QString& path, const QPoint& global_pos);
     void drag_started(const QString& path);
+    void files_dropped(const QString& folder_path, QList<int> file_indices);
     
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragLeaveEvent(QDragLeaveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
     
 private:
     FolderNode* node_;
@@ -70,6 +74,7 @@ signals:
     void folder_context_menu(const QString& path, const QPoint& global_pos);
     void add_folder_requested();
     void add_subfolder_requested(const QString& parent_path);
+    void files_dropped(const QString& folder_path, QList<int> file_indices);
     
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;

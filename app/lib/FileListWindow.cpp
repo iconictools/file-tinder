@@ -14,8 +14,32 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QLocale>
+#include <QDataStream>
 
 static const int kFileIndexRole = Qt::UserRole + 200;
+
+// Custom list widget that provides file-index MIME data for drag operations
+class DragListWidget : public QListWidget {
+public:
+    using QListWidget::QListWidget;
+protected:
+    QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override {
+        auto* data = new QMimeData();
+        QByteArray encoded;
+        QDataStream stream(&encoded, QIODevice::WriteOnly);
+        for (auto* item : items) {
+            stream << item->data(kFileIndexRole).toInt();
+        }
+        data->setData("application/x-filetinder-indices", encoded);
+        return data;
+    }
+    QStringList mimeTypes() const override {
+        return {"application/x-filetinder-indices"};
+    }
+    Qt::DropActions supportedDropActions() const override {
+        return Qt::MoveAction;
+    }
+};
 
 FileListWindow::FileListWindow(std::vector<FileToProcess>& files,
                                const std::vector<int>& filtered_indices,
@@ -53,10 +77,11 @@ void FileListWindow::build_ui() {
 
     layout->addLayout(filter_row);
 
-    // File list
-    list_widget_ = new QListWidget();
+    // File list (DragListWidget provides custom MIME data for cross-widget drag)
+    list_widget_ = new DragListWidget();
     list_widget_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     list_widget_->setDragEnabled(true);
+    list_widget_->setDragDropMode(QAbstractItemView::DragOnly);
     list_widget_->setStyleSheet(
         "QListWidget::item { padding: 3px 6px; }"
         "QListWidget::item:selected { background-color: palette(highlight); color: palette(highlighted-text); }");

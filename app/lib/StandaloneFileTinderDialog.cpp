@@ -38,6 +38,10 @@
 #include <QElapsedTimer>
 #include <QLocale>
 #include <QMenu>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDataStream>
 #include <QImageReader>
 #include <QSpinBox>
 #include <algorithm>
@@ -442,6 +446,8 @@ void StandaloneFileTinderDialog::setup_ui() {
         "QPushButton:hover { background-color: #c0392b; }"
     ).arg(ui::colors::kDeleteColor));
     connect(delete_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_delete);
+    delete_btn_->setAcceptDrops(true);
+    delete_btn_->installEventFilter(this);
     main_btn_row->addWidget(delete_btn_);
     
     keep_btn_ = new QPushButton("KEEP\n[Right]");
@@ -454,6 +460,8 @@ void StandaloneFileTinderDialog::setup_ui() {
         "QPushButton:hover { background-color: #27ae60; }"
     ).arg(ui::colors::kKeepColor));
     connect(keep_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_keep);
+    keep_btn_->setAcceptDrops(true);
+    keep_btn_->installEventFilter(this);
     main_btn_row->addWidget(keep_btn_);
     
     action_layout->addLayout(main_btn_row);
@@ -2189,6 +2197,52 @@ void StandaloneFileTinderDialog::reject() {
 }
 
 bool StandaloneFileTinderDialog::eventFilter(QObject* obj, QEvent* event) {
+    // Handle drag-and-drop from FileListWindow onto keep/delete buttons
+    if ((obj == keep_btn_ || obj == delete_btn_) && event->type() == QEvent::DragEnter) {
+        auto* de = static_cast<QDragEnterEvent*>(event);
+        if (de->mimeData()->hasFormat("application/x-filetinder-indices")) {
+            de->acceptProposedAction();
+            return true;
+        }
+    }
+    if ((obj == keep_btn_ || obj == delete_btn_) && event->type() == QEvent::Drop) {
+        auto* de = static_cast<QDropEvent*>(event);
+        if (de->mimeData()->hasFormat("application/x-filetinder-indices")) {
+            QByteArray encoded = de->mimeData()->data("application/x-filetinder-indices");
+            QDataStream stream(&encoded, QIODevice::ReadOnly);
+            QList<int> indices;
+            while (!stream.atEnd()) {
+                int idx;
+                stream >> idx;
+                indices.append(idx);
+            }
+            de->acceptProposedAction();
+
+            QString decision;
+            if (obj == keep_btn_) decision = "keep";
+            else if (obj == delete_btn_) decision = "delete";
+
+            if (!decision.isEmpty()) {
+                for (int fi : indices) {
+                    if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                        auto& file = files_[fi];
+                        QString old_decision = file.decision;
+                        if (old_decision == decision) continue;
+                        update_decision_count(old_decision, -1);
+                        file.decision = decision;
+                        file.decided_in_mode = mode_name_;
+                        update_decision_count(decision, 1);
+                        record_action(fi, old_decision, decision);
+                        db_.save_file_decision(source_folder_, file.path, decision, file.destination_folder);
+                    }
+                }
+                update_progress();
+                update_stats();
+                show_current_file();
+            }
+            return true;
+        }
+    }
     if (obj == file_info_label_ && event->type() == QEvent::MouseButtonDblClick) {
         int file_idx = get_current_file_index();
         if (file_idx >= 0 && file_idx < static_cast<int>(files_.size())) {

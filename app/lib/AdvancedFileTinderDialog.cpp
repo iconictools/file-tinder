@@ -25,6 +25,10 @@
 #include <QUrl>
 #include <QImageReader>
 #include <QFontMetrics>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDataStream>
 #include <algorithm>
 
 AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
@@ -377,6 +381,31 @@ void AdvancedFileTinderDialog::setup_mind_map() {
             this, &AdvancedFileTinderDialog::on_folder_context_menu);
     connect(mind_map_view_, &MindMapView::add_folder_requested,
             this, &AdvancedFileTinderDialog::on_add_node_clicked);
+    connect(mind_map_view_, &MindMapView::files_dropped, this, [this](const QString& folder_path, const QList<int>& indices) {
+        for (int fi : indices) {
+            if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                auto& file = files_[fi];
+                QString old_decision = file.decision;
+                if (file.decision != "pending") {
+                    update_decision_count(file.decision, -1);
+                    if (file.decision == "move" && !file.destination_folder.isEmpty() && folder_model_) {
+                        folder_model_->unassign_file_from_folder(file.destination_folder);
+                    }
+                }
+                file.decision = "move";
+                file.destination_folder = folder_path;
+                file.decided_in_mode = mode_name_;
+                move_count_++;
+                if (folder_model_) folder_model_->assign_file_to_folder(folder_path);
+                record_action(fi, old_decision, "move", folder_path);
+                db_.save_file_decision(source_folder_, file.path, "move", folder_path);
+            }
+        }
+        update_progress();
+        update_stats();
+        show_current_file();
+        if (mind_map_view_) mind_map_view_->refresh_layout();
+    });
     
     map_layout->addWidget(mind_map_view_);
     
@@ -516,9 +545,11 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
         "QPushButton:disabled { background-color: #5d3a37; color: #888; }"
     ).arg(ui::colors::kDeleteColor));
     connect(delete_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_delete);
+    delete_btn_->setAcceptDrops(true);
+    delete_btn_->installEventFilter(this);
     action_layout->addWidget(delete_btn_, 2);
     
-    // Keep compact (secondary in Advanced — clicking folders is primary)
+    // Keep compact (secondary in Advanced -- clicking folders is primary)
     keep_btn_ = new QPushButton("Keep [K]");
     keep_btn_->setMinimumHeight(btn_h);
     keep_btn_->setStyleSheet(QString(
@@ -527,6 +558,8 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
         "QPushButton:disabled { background-color: #2d5d3a; color: #888; }"
     ).arg(ui::colors::kKeepColor));
     connect(keep_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_keep);
+    keep_btn_->setAcceptDrops(true);
+    keep_btn_->installEventFilter(this);
     action_layout->addWidget(keep_btn_, 1);
     
     // Sort Later compact
@@ -1097,6 +1130,57 @@ void AdvancedFileTinderDialog::reject() {
 }
 
 bool AdvancedFileTinderDialog::eventFilter(QObject* obj, QEvent* event) {
+    // Handle drag-and-drop from FileListWindow onto keep/delete buttons
+    if ((obj == keep_btn_ || obj == delete_btn_) && event->type() == QEvent::DragEnter) {
+        auto* de = static_cast<QDragEnterEvent*>(event);
+        if (de->mimeData()->hasFormat("application/x-filetinder-indices")) {
+            de->acceptProposedAction();
+            return true;
+        }
+    }
+    if ((obj == keep_btn_ || obj == delete_btn_) && event->type() == QEvent::Drop) {
+        auto* de = static_cast<QDropEvent*>(event);
+        if (de->mimeData()->hasFormat("application/x-filetinder-indices")) {
+            QByteArray encoded = de->mimeData()->data("application/x-filetinder-indices");
+            QDataStream stream(&encoded, QIODevice::ReadOnly);
+            QList<int> indices;
+            while (!stream.atEnd()) {
+                int idx;
+                stream >> idx;
+                indices.append(idx);
+            }
+            de->acceptProposedAction();
+
+            QString decision;
+            if (obj == keep_btn_) decision = "keep";
+            else if (obj == delete_btn_) decision = "delete";
+
+            if (!decision.isEmpty()) {
+                for (int fi : indices) {
+                    if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                        auto& file = files_[fi];
+                        QString old_decision = file.decision;
+                        if (old_decision == decision) continue;
+                        if (file.decision != "pending") {
+                            update_decision_count(file.decision, -1);
+                            if (file.decision == "move" && !file.destination_folder.isEmpty() && folder_model_) {
+                                folder_model_->unassign_file_from_folder(file.destination_folder);
+                            }
+                        }
+                        file.decision = decision;
+                        file.decided_in_mode = mode_name_;
+                        update_decision_count(decision, 1);
+                        record_action(fi, old_decision, decision);
+                        db_.save_file_decision(source_folder_, file.path, decision, file.destination_folder);
+                    }
+                }
+                update_progress();
+                update_stats();
+                show_current_file();
+            }
+            return true;
+        }
+    }
     if (obj == file_name_label_ && event->type() == QEvent::MouseButtonDblClick) {
         int file_idx = get_current_file_index();
         if (file_idx >= 0 && file_idx < static_cast<int>(files_.size())) {
