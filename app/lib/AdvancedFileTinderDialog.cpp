@@ -178,7 +178,7 @@ void AdvancedFileTinderDialog::setup_filter_bar() {
         // Reset counts before re-scanning and reloading state
         keep_count_ = 0;
         delete_count_ = 0;
-        skip_count_ = 0;
+        sort_later_count_ = 0;
         move_count_ = 0;
         scan_files();
         apply_sort();
@@ -352,7 +352,7 @@ void AdvancedFileTinderDialog::setup_mind_map() {
     map_layout->addWidget(mind_map_view_);
     
     // Hint label
-    auto* hint = new QLabel("Click folder to assign file. [+] to add. Right-click for options. K=Keep, D=Delete, S=Skip, 1-0=Quick Access, Tab=Grid navigation");
+    auto* hint = new QLabel("Click folder to assign file. [+] to add. Right-click for options. K=Keep, D=Delete, S=Sort Later, 1-0=Quick Access, Tab=Grid navigation");
     hint->setStyleSheet("color: #666; font-size: 10px;");
     hint->setWordWrap(true);
     map_layout->addWidget(hint);
@@ -500,16 +500,16 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
     connect(keep_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_keep);
     action_layout->addWidget(keep_btn_, 1);
     
-    // Skip compact
-    skip_btn_ = new QPushButton("Skip [↓]");
-    skip_btn_->setMinimumHeight(btn_h);
-    skip_btn_->setStyleSheet(QString(
+    // Sort Later compact
+    sort_later_btn_ = new QPushButton("Sort Later [↓]");
+    sort_later_btn_->setMinimumHeight(btn_h);
+    sort_later_btn_->setStyleSheet(QString(
         "QPushButton { background-color: %1; color: white; font-size: 11px; border-radius: 4px; }"
         "QPushButton:hover { background-color: #e67e22; }"
         "QPushButton:disabled { background-color: #5d4e37; color: #888; }"
-    ).arg(ui::colors::kSkipColor));
-    connect(skip_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_skip);
-    action_layout->addWidget(skip_btn_, 1);
+    ).arg(ui::colors::kSortLaterColor));
+    connect(sort_later_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_sort_later);
+    action_layout->addWidget(sort_later_btn_, 1);
     
     // Undo compact
     undo_btn_ = new QPushButton("Undo [Z]");
@@ -522,6 +522,18 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
     undo_btn_->setEnabled(false);
     connect(undo_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_undo);
     action_layout->addWidget(undo_btn_, 1);
+    
+    // Redo compact
+    redo_btn_ = new QPushButton("Redo [Y]");
+    redo_btn_->setMinimumHeight(btn_h);
+    redo_btn_->setStyleSheet(
+        "QPushButton { background-color: #9b59b6; color: white; font-size: 11px; border-radius: 4px; }"
+        "QPushButton:hover { background-color: #8e44ad; }"
+        "QPushButton:disabled { background-color: #5d4e6e; color: #888; }"
+    );
+    redo_btn_->setEnabled(false);
+    connect(redo_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_redo);
+    action_layout->addWidget(redo_btn_, 1);
     
     static_cast<QVBoxLayout*>(layout())->addWidget(action_widget);
     
@@ -1204,7 +1216,7 @@ void AdvancedFileTinderDialog::keyPressEvent(QKeyEvent* event) {
             break;
         case Qt::Key_Down:
         case Qt::Key_S:
-            on_skip();
+            on_sort_later();
             break;
         case Qt::Key_Up:
             break;  // No back — use Z for Undo
@@ -1222,7 +1234,7 @@ void AdvancedFileTinderDialog::on_filter_changed() {
     FileFilterType filter_type = filter_widget_->get_filter_type();
     
     // Prompt user about resetting progress when filter changes
-    int reviewed = keep_count_ + delete_count_ + skip_count_ + move_count_;
+    int reviewed = keep_count_ + delete_count_ + sort_later_count_ + move_count_;
     if (reviewed > 0) {
         auto reply = QMessageBox::question(this, "Filter Changed",
             QString("You have %1 decisions made. Do you want to reset progress?\n\n"
@@ -1239,10 +1251,12 @@ void AdvancedFileTinderDialog::on_filter_changed() {
             }
             keep_count_ = 0;
             delete_count_ = 0;
-            skip_count_ = 0;
+            sort_later_count_ = 0;
             move_count_ = 0;
             undo_stack_.clear();
+            redo_stack_.clear();
             if (undo_btn_) undo_btn_->setEnabled(false);
+            if (redo_btn_) redo_btn_->setEnabled(false);
             db_.clear_session(source_folder_);
         }
     }

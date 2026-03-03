@@ -10,7 +10,7 @@
 
 struct FileDecision {
     QString file_path;
-    QString decision;  // "keep", "delete", "skip", "move"
+    QString decision;  // "keep", "delete", "sort_later", "move"
     QString destination_folder;
     qint64 timestamp;
 };

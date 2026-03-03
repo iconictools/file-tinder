@@ -906,7 +906,7 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
             }
             if (file.decision == "keep") keep_count_--;
             else if (file.decision == "delete") delete_count_--;
-            else if (file.decision == "skip") skip_count_--;
+            else if (file.decision == "sort_later") sort_later_count_--;
             else if (file.decision == "move") move_count_--;
             file.decision = "pending";
             file.destination_folder.clear();

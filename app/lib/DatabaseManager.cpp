@@ -48,7 +48,7 @@ bool DatabaseManager::create_tables() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             folder_path TEXT NOT NULL,
             file_path TEXT NOT NULL,
-            decision TEXT NOT NULL CHECK (decision IN ('pending', 'keep', 'delete', 'skip', 'move')),
+            decision TEXT NOT NULL CHECK (decision IN ('pending', 'keep', 'delete', 'sort_later', 'move')),
             destination_folder TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(folder_path, file_path)

@@ -57,7 +57,7 @@ namespace ui::colors {
     constexpr const char* kNodeBorder = "#cccccc";
     constexpr const char* kDeleteColor = "#e74c3c";
     constexpr const char* kKeepColor = "#2ecc71";
-    constexpr const char* kSkipColor = "#f39c12";
+    constexpr const char* kSortLaterColor = "#f39c12";
     constexpr const char* kMoveColor = "#3498db";
 }
 

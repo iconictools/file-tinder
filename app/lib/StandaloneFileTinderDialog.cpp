@@ -54,7 +54,7 @@ StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_fol
     , include_folders_(false)
     , keep_count_(0)
     , delete_count_(0)
-    , skip_count_(0)
+    , sort_later_count_(0)
     , move_count_(0)
     , image_preview_window_(nullptr)
     , preview_label_(nullptr)
@@ -70,9 +70,10 @@ StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_fol
     , shortcuts_label_(nullptr)
     , back_btn_(nullptr)
     , delete_btn_(nullptr)
-    , skip_btn_(nullptr)
+    , sort_later_btn_(nullptr)
     , keep_btn_(nullptr)
     , undo_btn_(nullptr)
+    , redo_btn_(nullptr)
     , preview_btn_(nullptr)
     , finish_btn_(nullptr)
     , switch_mode_btn_(nullptr)
@@ -403,18 +404,18 @@ void StandaloneFileTinderDialog::setup_ui() {
     
     action_layout->addLayout(main_btn_row);
     
-    // Row 2: SKIP only (Back removed — use Undo instead)
-    skip_btn_ = new QPushButton("Skip [↓]");
-    skip_btn_->setFixedHeight(ui::scaling::scaled(40));
-    skip_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    skip_btn_->setStyleSheet(QString(
+    // Row 2: Sort Later only (Back removed — use Undo instead)
+    sort_later_btn_ = new QPushButton("Sort Later [↓]");
+    sort_later_btn_->setFixedHeight(ui::scaling::scaled(40));
+    sort_later_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    sort_later_btn_->setStyleSheet(QString(
         "QPushButton { font-size: 12px; font-weight: bold; "
         "background-color: %1; border: 1px solid #d68910; color: white; border-radius: 4px; }"
         "QPushButton:hover { background-color: #e67e22; }"
         "QPushButton:disabled { background-color: #5d4e37; color: #888; }"
-    ).arg(ui::colors::kSkipColor));
-    connect(skip_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_skip);
-    action_layout->addWidget(skip_btn_);
+    ).arg(ui::colors::kSortLaterColor));
+    connect(sort_later_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_sort_later);
+    action_layout->addWidget(sort_later_btn_);
     
     main_layout->addWidget(action_widget);
     
@@ -436,6 +437,19 @@ void StandaloneFileTinderDialog::setup_ui() {
     undo_btn_->setEnabled(false);  // Disabled until there's something to undo
     connect(undo_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_undo);
     bottom_layout->addWidget(undo_btn_);
+    
+    // Redo button
+    redo_btn_ = new QPushButton("Redo [Y]");
+    redo_btn_->setFixedHeight(ui::scaling::scaled(36));
+    redo_btn_->setStyleSheet(
+        "QPushButton { font-size: 12px; padding: 8px 15px; "
+        "background-color: #9b59b6; border-radius: 4px; color: white; }"
+        "QPushButton:hover { background-color: #8e44ad; }"
+        "QPushButton:disabled { background-color: #5d4e6e; color: #888; }"
+    );
+    redo_btn_->setEnabled(false);  // Disabled until there's something to redo
+    connect(redo_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_redo);
+    bottom_layout->addWidget(redo_btn_);
     
     // Preview toggle (toggles inline preview in basic mode)
     preview_btn_ = new QPushButton("Preview [P]");
@@ -550,7 +564,7 @@ void StandaloneFileTinderDialog::setup_ui() {
     main_layout->addWidget(bottom_bar);
     
     // Keyboard shortcuts hint
-    shortcuts_label_ = new QLabel("Right=Keep | Left=Delete | Down=Skip | Z=Undo | F=File List | Ctrl+F=Search | P=Preview | Enter=Finish | ?=Help");
+    shortcuts_label_ = new QLabel("Right=Keep | Left=Delete | Down=Sort Later | Z=Undo | Y=Redo | F=File List | Ctrl+F=Search | P=Preview | Enter=Finish | ?=Help");
     shortcuts_label_->setAlignment(Qt::AlignCenter);
     shortcuts_label_->setStyleSheet("color: #7f8c8d; font-size: 10px;");
     main_layout->addWidget(shortcuts_label_);
@@ -651,7 +665,7 @@ void StandaloneFileTinderDialog::load_session_state() {
                 
                 if (decision.decision == "keep") keep_count_++;
                 else if (decision.decision == "delete") delete_count_++;
-                else if (decision.decision == "skip") skip_count_++;
+                else if (decision.decision == "sort_later") sort_later_count_++;
                 else if (decision.decision == "move") move_count_++;
                 
                 break;
@@ -688,7 +702,7 @@ void StandaloneFileTinderDialog::show_current_file() {
         if (file_info_label_) file_info_label_->setText("");
         if (keep_btn_) keep_btn_->setEnabled(false);
         if (delete_btn_) delete_btn_->setEnabled(false);
-        if (skip_btn_) skip_btn_->setEnabled(false);
+        if (sort_later_btn_) sort_later_btn_->setEnabled(false);
         return;
     }
     
@@ -713,7 +727,7 @@ void StandaloneFileTinderDialog::show_current_file() {
     bool has_file = (file_idx >= 0);
     if (keep_btn_) keep_btn_->setEnabled(has_file);
     if (delete_btn_) delete_btn_->setEnabled(has_file);
-    if (skip_btn_) skip_btn_->setEnabled(has_file);
+    if (sort_later_btn_) sort_later_btn_->setEnabled(has_file);
 }
 
 void StandaloneFileTinderDialog::update_preview(const QString& file_path) {
@@ -876,10 +890,10 @@ void StandaloneFileTinderDialog::update_stats() {
     QString stats = QString(
         "<span style='color: %1;'>Keep: %2</span>  |  "
         "<span style='color: %3;'>Delete: %4</span>  |  "
-        "<span style='color: %5;'>Skip: %6</span>"
+        "<span style='color: %5;'>Sort Later: %6</span>"
     ).arg(ui::colors::kKeepColor).arg(keep_count_)
      .arg(ui::colors::kDeleteColor).arg(delete_count_)
-     .arg(ui::colors::kSkipColor).arg(skip_count_);
+     .arg(ui::colors::kSortLaterColor).arg(sort_later_count_);
     
     // Only show Move count if there are moves (relevant in Advanced Mode)
     if (move_count_ > 0) {
@@ -894,7 +908,7 @@ void StandaloneFileTinderDialog::update_stats() {
 void StandaloneFileTinderDialog::update_decision_count(const QString& old_decision, int delta) {
     if (old_decision == "keep") keep_count_ += delta;
     else if (old_decision == "delete") delete_count_ += delta;
-    else if (old_decision == "skip") skip_count_ += delta;
+    else if (old_decision == "sort_later") sort_later_count_ += delta;
     else if (old_decision == "move") move_count_ += delta;
     else if (old_decision == "copy") copy_count_ += delta;
 }
@@ -909,6 +923,10 @@ int StandaloneFileTinderDialog::get_current_file_index() const {
 
 void StandaloneFileTinderDialog::record_action(int file_index, const QString& old_decision, 
                                                const QString& new_decision, const QString& old_dest_folder) {
+    // Any new action clears the redo stack
+    redo_stack_.clear();
+    if (redo_btn_) redo_btn_->setEnabled(false);
+    
     ActionRecord record;
     record.file_index = file_index;
     record.previous_decision = old_decision;
@@ -996,36 +1014,50 @@ void StandaloneFileTinderDialog::on_delete() {
     }
 }
 
-void StandaloneFileTinderDialog::on_skip() {
+void StandaloneFileTinderDialog::on_sort_later() {
     try {
         if (animating_) return;
         int file_idx = get_current_file_index();
         if (file_idx < 0) return;
         
         auto& file = files_[file_idx];
-        LOG_DEBUG("BasicMode", QString("Skipping file: %1").arg(file.name));
+        LOG_DEBUG("BasicMode", QString("Sort later file: %1").arg(file.name));
         
         QString old_decision = file.decision;
         if (old_decision != "pending") {
             update_decision_count(old_decision, -1);
         }
         
-        file.decision = "skip";
-        skip_count_++;
+        file.decision = "sort_later";
+        sort_later_count_++;
         
         // Record for undo
-        record_action(file_idx, old_decision, "skip");
+        record_action(file_idx, old_decision, "sort_later");
         
         // Visual feedback
         if (progress_label_) {
-            progress_label_->setText(QString("<span style='color: %1;'>↓ Skipped: %2</span>")
-                .arg(ui::colors::kSkipColor, file.name));
+            progress_label_->setText(QString("<span style='color: %1;'>↓ Sort Later: %2</span>")
+                .arg(ui::colors::kSortLaterColor, file.name));
+        }
+        
+        // Move this file index to the END of filtered_indices_ so user sees it again later
+        if (current_filtered_index_ >= 0 && current_filtered_index_ < static_cast<int>(filtered_indices_.size())) {
+            int idx_val = filtered_indices_[current_filtered_index_];
+            filtered_indices_.erase(filtered_indices_.begin() + current_filtered_index_);
+            filtered_indices_.push_back(idx_val);
+            // Don't increment current_filtered_index_ — the next file naturally slides into this position
         }
         
         animate_swipe(true);
-        advance_to_next();
+        // Show the file now at current_filtered_index_ (the next file slid into position)
+        if (current_filtered_index_ >= static_cast<int>(filtered_indices_.size())) {
+            current_filtered_index_ = 0;  // Wrap around if at end
+        }
+        update_stats();
+        update_progress();
+        show_current_file();
     } catch (const std::exception& ex) {
-        LOG_ERROR("BasicMode", QString("Error in on_skip: %1").arg(ex.what()));
+        LOG_ERROR("BasicMode", QString("Error in on_sort_later: %1").arg(ex.what()));
         QMessageBox::warning(this, "Error", QString("An error occurred: %1").arg(ex.what()));
     }
 }
@@ -1040,6 +1072,10 @@ void StandaloneFileTinderDialog::on_undo() {
         // Pop the last action
         ActionRecord last_action = undo_stack_.back();
         undo_stack_.pop_back();
+        
+        // Push onto redo stack
+        redo_stack_.push_back(last_action);
+        if (redo_btn_) redo_btn_->setEnabled(true);
         
         // Revert the file's decision
         auto& file = files_[last_action.file_index];
@@ -1086,6 +1122,63 @@ void StandaloneFileTinderDialog::on_undo() {
     }
 }
 
+void StandaloneFileTinderDialog::on_redo() {
+    try {
+        if (redo_stack_.empty()) {
+            LOG_DEBUG("BasicMode", "Nothing to redo");
+            return;
+        }
+        
+        // Pop the last undone action
+        ActionRecord action = redo_stack_.back();
+        redo_stack_.pop_back();
+        
+        auto& file = files_[action.file_index];
+        LOG_INFO("BasicMode", QString("Redoing action on file: %1 (applying %2)")
+                             .arg(file.name, action.new_decision));
+        
+        // Revert the restored decision count
+        if (file.decision != "pending") {
+            update_decision_count(file.decision, -1);
+        }
+        
+        // Reapply the new decision
+        file.decision = action.new_decision;
+        if (action.new_decision == "move" || action.new_decision == "copy") {
+            file.destination_folder = action.destination_folder;
+        }
+        update_decision_count(action.new_decision, 1);
+        
+        // Save to DB
+        db_.save_file_decision(source_folder_, file.path, file.decision, file.destination_folder);
+        
+        // Push back onto undo stack
+        undo_stack_.push_back(action);
+        if (undo_btn_) undo_btn_->setEnabled(true);
+        
+        // Navigate to the file
+        for (int i = 0; i < static_cast<int>(filtered_indices_.size()); ++i) {
+            if (filtered_indices_[i] == action.file_index) {
+                current_filtered_index_ = i;
+                break;
+            }
+        }
+        
+        // Update UI
+        update_stats();
+        update_progress();
+        show_current_file();
+        
+        if (redo_stack_.empty() && redo_btn_) {
+            redo_btn_->setEnabled(false);
+        }
+        
+    } catch (const std::exception& ex) {
+        LOG_ERROR("BasicMode", QString("Error in on_redo: %1").arg(ex.what()));
+        QMessageBox::warning(this, "Error", QString("An error occurred: %1").arg(ex.what()));
+    }
+}
+
 void StandaloneFileTinderDialog::on_show_preview() {
     try {
         // Toggle inline preview visibility in basic mode
@@ -1101,7 +1194,7 @@ void StandaloneFileTinderDialog::on_show_preview() {
 }
 
 void StandaloneFileTinderDialog::on_reset_progress() {
-    int reviewed = keep_count_ + delete_count_ + skip_count_ + move_count_;
+    int reviewed = keep_count_ + delete_count_ + sort_later_count_ + move_count_;
     if (reviewed == 0) {
         QMessageBox::information(this, "Nothing to Reset", "No decisions have been made yet.");
         return;
@@ -1121,10 +1214,12 @@ void StandaloneFileTinderDialog::on_reset_progress() {
     }
     keep_count_ = 0;
     delete_count_ = 0;
-    skip_count_ = 0;
+    sort_later_count_ = 0;
     move_count_ = 0;
     undo_stack_.clear();
+    redo_stack_.clear();
     if (undo_btn_) undo_btn_->setEnabled(false);
+    if (redo_btn_) redo_btn_->setEnabled(false);
     
     // Clear from database
     db_.clear_session(source_folder_);
@@ -1225,7 +1320,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
     
     stats_layout->addWidget(create_stat_box("Keep", keep_count_, ui::colors::kKeepColor));
     stats_layout->addWidget(create_stat_box("Delete", delete_count_, ui::colors::kDeleteColor));
-    stats_layout->addWidget(create_stat_box("Skip", skip_count_, ui::colors::kSkipColor));
+    stats_layout->addWidget(create_stat_box("Sort Later", sort_later_count_, ui::colors::kSortLaterColor));
     stats_layout->addWidget(create_stat_box("Move", move_count_, ui::colors::kMoveColor));
     if (copy_count_ > 0)
         stats_layout->addWidget(create_stat_box("Copy", copy_count_, "#8e44ad"));
@@ -1244,10 +1339,10 @@ void StandaloneFileTinderDialog::show_review_summary() {
     bulk_keep_btn->setMaximumWidth(70);
     bulk_keep_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
     bulk_bar->addWidget(bulk_keep_btn);
-    auto* bulk_skip_btn = new QPushButton("All Skip");
-    bulk_skip_btn->setMaximumWidth(70);
-    bulk_skip_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
-    bulk_bar->addWidget(bulk_skip_btn);
+    auto* bulk_sort_later_btn = new QPushButton("All Sort Later");
+    bulk_sort_later_btn->setMaximumWidth(90);
+    bulk_sort_later_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
+    bulk_bar->addWidget(bulk_sort_later_btn);
     auto* bulk_pending_btn = new QPushButton("All Pending");
     bulk_pending_btn->setMaximumWidth(80);
     bulk_pending_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
@@ -1265,7 +1360,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
     auto* review_filter_layout = new QHBoxLayout();
     review_filter_layout->addWidget(new QLabel("Filter:"));
     auto* review_filter_combo = new QComboBox();
-    review_filter_combo->addItems({"All", "Keep", "Delete", "Skip", "Move", "Copy", "Pending"});
+    review_filter_combo->addItems({"All", "Keep", "Delete", "Sort Later", "Move", "Copy", "Pending"});
     review_filter_layout->addWidget(review_filter_combo);
     review_filter_layout->addSpacing(16);
     review_filter_layout->addWidget(new QLabel("Sort:"));
@@ -1292,20 +1387,13 @@ void StandaloneFileTinderDialog::show_review_summary() {
         QApplication::processEvents();
     }
 
-    // Populate only files with non-pending decisions
+    // Populate ALL files (including pending)
     int visible_row = 0;
     std::vector<int> row_to_file_idx;
-    for (int i = 0; i < static_cast<int>(files_.size()); ++i) {
-        if (files_[i].decision != "pending") {
-            visible_row++;
-        }
-    }
-    table->setRowCount(visible_row);
+    table->setRowCount(static_cast<int>(files_.size()));
     
-    visible_row = 0;
     for (int i = 0; i < static_cast<int>(files_.size()); ++i) {
         const auto& file = files_[i];
-        if (file.decision == "pending") continue;
         
         row_to_file_idx.push_back(i);
         
@@ -1320,7 +1408,8 @@ void StandaloneFileTinderDialog::show_review_summary() {
         else if (file.decision == "delete") row_color = QColor("#e74c3c");
         else if (file.decision == "move") row_color = QColor("#3498db");
         else if (file.decision == "copy") row_color = QColor("#9b59b6");
-        else if (file.decision == "skip") row_color = QColor("#f39c12");
+        else if (file.decision == "sort_later") row_color = QColor("#f39c12");
+        else if (file.decision == "pending") row_color = QColor("#888");
         else row_color = QColor("#888");
         name_item->setForeground(row_color);
 
@@ -1334,7 +1423,7 @@ void StandaloneFileTinderDialog::show_review_summary() {
         
         // Decision (editable via combo box)
         auto* combo = new QComboBox();
-        combo->addItems({"keep", "delete", "skip", "move", "copy", "pending"});
+        combo->addItems({"keep", "delete", "sort_later", "move", "copy", "pending"});
         combo->setCurrentText(file.decision);
         table->setCellWidget(visible_row, 2, combo);
         
@@ -1418,10 +1507,10 @@ void StandaloneFileTinderDialog::show_review_summary() {
             if (combo) combo->setCurrentText("keep");
         }
     });
-    connect(bulk_skip_btn, &QPushButton::clicked, this, [table]() {
+    connect(bulk_sort_later_btn, &QPushButton::clicked, this, [table]() {
         for (int r = 0; r < table->rowCount(); ++r) {
             auto* combo = qobject_cast<QComboBox*>(table->cellWidget(r, 2));
-            if (combo) combo->setCurrentText("skip");
+            if (combo) combo->setCurrentText("sort_later");
         }
     });
     connect(bulk_pending_btn, &QPushButton::clicked, this, [table]() {
@@ -1439,7 +1528,9 @@ void StandaloneFileTinderDialog::show_review_summary() {
             }
             auto* combo = qobject_cast<QComboBox*>(table->cellWidget(row, 2));
             if (combo) {
-                bool match = combo->currentText().compare(filter, Qt::CaseInsensitive) == 0;
+                // Map display filter names to internal decision values
+                QString filter_value = filter.toLower().replace(" ", "_");
+                bool match = (combo->currentText() == filter_value);
                 table->setRowHidden(row, !match);
             }
         }
@@ -1646,7 +1737,7 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
     auto* stats_layout = new QVBoxLayout(stats_group);
     
     int total_files = static_cast<int>(files_.size());
-    int total_reviewed = keep_count_ + delete_count_ + skip_count_ + move_count_;
+    int total_reviewed = keep_count_ + delete_count_ + sort_later_count_ + move_count_;
     double elapsed_sec = elapsed_ms / 1000.0;
     double files_per_min = elapsed_sec > 0 ? (total_reviewed / elapsed_sec * 60.0) : 0;
     
@@ -1655,12 +1746,12 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
         "Files reviewed: %2\n"
         "  • Kept: %3\n"
         "  • Deleted: %4\n"
-        "  • Skipped: %5\n"
+        "  • Sort Later: %5\n"
         "  • Moved: %6\n\n"
         "Execution time: %7s\n"
         "Files moved: %8 | Files deleted: %9 | Errors: %10"
     ).arg(total_files).arg(total_reviewed)
-     .arg(keep_count_).arg(delete_count_).arg(skip_count_).arg(move_count_)
+     .arg(keep_count_).arg(delete_count_).arg(sort_later_count_).arg(move_count_)
      .arg(elapsed_sec, 0, 'f', 1)
      .arg(result.files_moved).arg(result.files_deleted).arg(result.errors));
     stats_text->setStyleSheet("font-size: 12px; padding: 8px;");
@@ -1884,7 +1975,7 @@ void StandaloneFileTinderDialog::keyPressEvent(QKeyEvent* event) {
             on_delete();
             break;
         case Qt::Key_Down:
-            on_skip();
+            on_sort_later();
             break;
         case Qt::Key_Up:
             // Up arrow is no longer Back — use Z for Undo instead
@@ -1894,6 +1985,9 @@ void StandaloneFileTinderDialog::keyPressEvent(QKeyEvent* event) {
             break;
         case Qt::Key_Z:
             on_undo();
+            break;
+        case Qt::Key_Y:
+            on_redo();
             break;
         case Qt::Key_P:
             on_show_preview();
@@ -1974,7 +2068,7 @@ void StandaloneFileTinderDialog::reject() {
     }
     
     // Check if there are any pending decisions to save
-    int reviewed = keep_count_ + delete_count_ + skip_count_ + move_count_;
+    int reviewed = keep_count_ + delete_count_ + sort_later_count_ + move_count_;
     
     if (reviewed > 0 && !files_.empty()) {
         closing_ = true;  // Prevent re-entry from message box events
@@ -2079,7 +2173,7 @@ void StandaloneFileTinderDialog::on_folders_toggle_changed(int state) {
     // Reset counts before re-scanning and reloading state
     keep_count_ = 0;
     delete_count_ = 0;
-    skip_count_ = 0;
+    sort_later_count_ = 0;
     move_count_ = 0;
     scan_files();  // Re-scan with new settings
     apply_sort();
@@ -2161,7 +2255,7 @@ void StandaloneFileTinderDialog::apply_filter(FileFilterType filter) {
     current_filter_ = filter;
     
     // Prompt user about resetting progress when filter changes
-    int reviewed = keep_count_ + delete_count_ + skip_count_ + move_count_;
+    int reviewed = keep_count_ + delete_count_ + sort_later_count_ + move_count_;
     if (reviewed > 0) {
         auto reply = QMessageBox::question(this, "Filter Changed",
             QString("You have %1 decisions made. Do you want to reset progress and start fresh with this filter?\n\n"
@@ -2176,10 +2270,12 @@ void StandaloneFileTinderDialog::apply_filter(FileFilterType filter) {
             }
             keep_count_ = 0;
             delete_count_ = 0;
-            skip_count_ = 0;
+            sort_later_count_ = 0;
             move_count_ = 0;
             undo_stack_.clear();
+            redo_stack_.clear();
             if (undo_btn_) undo_btn_->setEnabled(false);
+            if (redo_btn_) redo_btn_->setEnabled(false);
             db_.clear_session(source_folder_);
         }
     }
@@ -2365,8 +2461,9 @@ void StandaloneFileTinderDialog::show_shortcuts_help() {
 <tr class='section'><td colspan='2'>All Modes</td></tr>
 <tr><td><span class='key'>&rarr;</span> Right Arrow</td><td>Keep file in original location</td></tr>
 <tr><td><span class='key'>&larr;</span> Left Arrow</td><td>Mark file for deletion</td></tr>
-<tr><td><span class='key'>&darr;</span> Down Arrow</td><td>Skip file (no action)</td></tr>
+<tr><td><span class='key'>&darr;</span> Down Arrow</td><td>Sort later (move to end of list)</td></tr>
 <tr><td><span class='key'>Z</span> or <span class='key'>Backspace</span></td><td>Undo last action</td></tr>
+<tr><td><span class='key'>Y</span></td><td>Redo last undone action</td></tr>
 <tr><td><span class='key'>P</span></td><td>Toggle file preview</td></tr>
 <tr><td><span class='key'>Enter</span></td><td>Finish review and execute</td></tr>
 <tr><td><span class='key'>?</span> or <span class='key'>Shift+/</span></td><td>Show this help</td></tr>

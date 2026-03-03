@@ -39,7 +39,7 @@ struct FileToProcess {
     qint64 size;
     QString modified_date;
     QDateTime modified_datetime;  // For sorting
-    QString decision;           // "pending", "keep", "delete", "skip", "move"
+    QString decision;           // "pending", "keep", "delete", "sort_later", "move"
     QString destination_folder; // For move operations
     QString mime_type;          // MIME type for filtering
     bool is_directory;          // For folder support
@@ -105,12 +105,13 @@ protected:
     // Statistics
     int keep_count_;
     int delete_count_;
-    int skip_count_;
+    int sort_later_count_;
     int move_count_;
     int copy_count_ = 0;
     
-    // Undo stack
+    // Undo/redo stacks
     std::vector<ActionRecord> undo_stack_;
+    std::vector<ActionRecord> redo_stack_;
     
     // Image preview window (for separate window mode)
     ImagePreviewWindow* image_preview_window_;
@@ -133,9 +134,10 @@ protected:
     
     QPushButton* back_btn_;
     QPushButton* delete_btn_;
-    QPushButton* skip_btn_;
+    QPushButton* sort_later_btn_;
     QPushButton* keep_btn_;
     QPushButton* undo_btn_;        // Undo button (replaces move_btn_)
+    QPushButton* redo_btn_;        // Redo button
     QPushButton* preview_btn_;     // Image preview in separate window
     QPushButton* finish_btn_;
     QPushButton* switch_mode_btn_;
@@ -185,9 +187,10 @@ protected:
     // Actions
     virtual void on_keep();
     virtual void on_delete();
-    virtual void on_skip();
+    virtual void on_sort_later();
     virtual void on_search(const QString& text);
     virtual void on_undo();           // Undo last action
+    virtual void on_redo();           // Redo last undone action
     virtual void on_show_preview();   // Open image in separate window
     virtual void on_finish();
     void advance_to_next();

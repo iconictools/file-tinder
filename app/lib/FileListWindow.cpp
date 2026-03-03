@@ -79,8 +79,8 @@ void FileListWindow::build_ui() {
         keep_action->setData("keep");
         auto* delete_action = menu.addAction("Delete");
         delete_action->setData("delete");
-        auto* skip_action = menu.addAction("Skip");
-        skip_action->setData("skip");
+        auto* sort_later_action = menu.addAction("Sort Later");
+        sort_later_action->setData("sort_later");
         menu.addSeparator();
 
         // Folder assignment
@@ -161,7 +161,7 @@ void FileListWindow::update_list() {
         if (file.decision == "pending") status = "[ ]";
         else if (file.decision == "keep") status = "[K]";
         else if (file.decision == "delete") status = "[D]";
-        else if (file.decision == "skip") status = "[S]";
+        else if (file.decision == "sort_later") status = "[L]";
         else if (file.decision == "move") status = "[M]";
         else if (file.decision == "copy") status = "[C]";
         else status = "[?]";
@@ -176,7 +176,7 @@ void FileListWindow::update_list() {
         // Color by decision
         if (file.decision == "keep") item->setForeground(QColor("#2ecc71"));
         else if (file.decision == "delete") item->setForeground(QColor("#e74c3c"));
-        else if (file.decision == "skip") item->setForeground(QColor("#95a5a6"));
+        else if (file.decision == "sort_later") item->setForeground(QColor("#95a5a6"));
         else if (file.decision == "move") item->setForeground(QColor("#3498db"));
         else if (file.decision == "copy") item->setForeground(QColor("#9b59b6"));
 
