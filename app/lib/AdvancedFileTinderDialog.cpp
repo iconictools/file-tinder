@@ -136,6 +136,9 @@ void AdvancedFileTinderDialog::setup_ui() {
     if (!folder_model_) {
         folder_model_ = new FolderTreeModel(this);
         folder_model_->set_root_folder(source_folder_);
+    } else if (folder_model_->root_folder() != source_folder_) {
+        // Shared model is for a different folder — update it
+        folder_model_->set_root_folder(source_folder_);
     }
     mind_map_view_->set_model(folder_model_);
     

@@ -174,7 +174,7 @@ void FilterWidget::setup_ui() {
     subfolder_depth_spin_ = new QSpinBox();
     subfolder_depth_spin_->setRange(0, 5);
     subfolder_depth_spin_->setValue(1);
-    subfolder_depth_spin_->setMaximumWidth(45);
+    subfolder_depth_spin_->setMaximumWidth(ui::scaling::scaled(45));
     subfolder_depth_spin_->setToolTip("How many levels of subfolders to include (0 = top-level only)");
     subfolder_depth_spin_->setEnabled(false);
     depth_row->addWidget(subfolder_depth_spin_);
