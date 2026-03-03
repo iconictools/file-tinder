@@ -51,7 +51,7 @@ void FolderButton::update_display() {
             }
         }
     } else if (path_display_mode_ == 1 && !source_path_.isEmpty()) {
-        // Full paths: one-level relative (parent/name if deeper than direct child)
+        // Paths: one-level relative (parent/name if deeper than direct child)
         QString p = node_->path;
         QString src = source_path_;
         // Normalize to forward slashes for comparison

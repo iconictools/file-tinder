@@ -1340,11 +1340,11 @@ void AdvancedFileTinderDialog::save_grid_config() {
     bool compact = mind_map_view_ ? mind_map_view_->compact_mode() : true;
     int rows = mind_map_view_ ? mind_map_view_->max_rows_per_col() : 6;
     int custom_w = mind_map_view_ ? mind_map_view_->custom_width() : 0;
-    bool full_paths = mind_map_view_ ? (mind_map_view_->path_display_mode() > 0) : false;
+    int path_mode = mind_map_view_ ? mind_map_view_->path_display_mode() : 0;
     paths.append(QString("__meta__compact=%1").arg(compact ? 1 : 0));
     paths.append(QString("__meta__rows=%1").arg(rows));
     paths.append(QString("__meta__width=%1").arg(custom_w));
-    paths.append(QString("__meta__fullpaths=%1").arg(full_paths ? 1 : 0));
+    paths.append(QString("__meta__fullpaths=%1").arg(path_mode));
     
     db_.save_grid_config(source_folder_, name, paths);
     QMessageBox::information(this, "Saved", QString("Grid configuration '%1' saved with %2 folder(s).")
@@ -1371,7 +1371,7 @@ void AdvancedFileTinderDialog::load_grid_config() {
     bool meta_compact = true;
     int meta_rows = 6;
     int meta_width = 0;
-    bool meta_fullpaths = false;
+    int meta_fullpaths = 0;
     QStringList folder_paths;
     for (const QString& p : paths) {
         if (p.startsWith("__meta__")) {
@@ -1405,7 +1405,7 @@ void AdvancedFileTinderDialog::load_grid_config() {
         mind_map_view_->set_compact_mode(meta_compact);
         mind_map_view_->set_max_rows_per_col(meta_rows);
         mind_map_view_->set_custom_width(meta_width);
-        mind_map_view_->set_path_display_mode(meta_fullpaths ? 1 : 0);
+        mind_map_view_->set_path_display_mode(meta_fullpaths);
     }
     if (mind_map_view_) mind_map_view_->refresh_layout();
 }
