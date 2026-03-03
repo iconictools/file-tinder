@@ -225,7 +225,7 @@ QString UserDataDialog::build_analysis_prompt() {
         history += "\n";
         ++count;
         // Limit to 500 entries to avoid exceeding token limits
-        if (count >= 500) {
+        if (count >= 500 && entries.size() > 500) {
             history += QString("... and %1 more entries\n").arg(static_cast<int>(entries.size()) - 500);
             break;
         }
@@ -338,7 +338,7 @@ void UserDataDialog::send_analysis_request(const QString& prompt) {
         generate_btn_->setEnabled(true);
 
         int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (reply->error() != QNetworkReply::NoError && !(status >= 200 && status < 300)) {
+        if (reply->error() != QNetworkReply::NoError || (status > 0 && (status < 200 || status >= 300))) {
             QString err = reply->errorString();
             QString resp_body = QString::fromUtf8(reply->readAll()).left(500);
             analysis_display_->setPlainText(
