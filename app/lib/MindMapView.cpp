@@ -204,11 +204,13 @@ void MindMapView::refresh_layout() {
 
     // Show empty state message if no child folders exist
     if (!model_ || !model_->root_node() || model_->root_node()->children.empty()) {
-        auto* empty_label = new QLabel("No destination folders yet.\nClick [+] to add folders.", content_widget_);
-        empty_label->setStyleSheet("color: #888; font-size: 13px; font-style: italic;");
-        empty_label->setAlignment(Qt::AlignCenter);
-        empty_label->move(200, 50);
-        empty_label->show();
+        empty_label_ = new QLabel("No destination folders yet.\nClick [+] to add folders.", content_widget_);
+        empty_label_->setStyleSheet("color: #888; font-size: 13px; font-style: italic;");
+        empty_label_->setAlignment(Qt::AlignCenter);
+        empty_label_->move(200, 50);
+        empty_label_->show();
+    } else {
+        empty_label_ = nullptr;  // Not needed — will be deleted with content_widget_ on next refresh
     }
     
     // Set the new content widget

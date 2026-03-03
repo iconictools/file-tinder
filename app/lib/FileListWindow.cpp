@@ -20,7 +20,7 @@ FileListWindow::FileListWindow(std::vector<FileToProcess>& files,
                                const std::vector<int>& filtered_indices,
                                int current_index,
                                QWidget* parent)
-    : QDialog(parent, Qt::Tool | Qt::WindowStaysOnTopHint)
+    : QDialog(parent, Qt::Tool)
     , files_(files)
     , filtered_indices_(filtered_indices)
     , current_index_(current_index)

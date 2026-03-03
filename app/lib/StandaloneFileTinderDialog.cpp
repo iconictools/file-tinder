@@ -117,6 +117,9 @@ void StandaloneFileTinderDialog::initialize() {
     // Save this folder as last used
     save_last_folder();
     
+    // Start session timer for review pace tracking
+    session_timer_.start();
+    
     // Size window to fit within the available screen area
     if (auto* screen = QApplication::primaryScreen()) {
         QRect avail = screen->availableGeometry();
@@ -707,7 +710,11 @@ void StandaloneFileTinderDialog::show_current_file() {
     }
     
     const auto& file = files_[file_idx];
-    update_preview(file.path);
+    // Only reload preview if the file actually changed (avoids zoom reset on filter/sort)
+    if (file.path != current_preview_path_) {
+        current_preview_path_ = file.path;
+        update_preview(file.path);
+    }
     update_file_info(file);
     update_progress();
     
@@ -1739,7 +1746,9 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
     int total_files = static_cast<int>(files_.size());
     int total_reviewed = keep_count_ + delete_count_ + sort_later_count_ + move_count_;
     double elapsed_sec = elapsed_ms / 1000.0;
-    double files_per_min = elapsed_sec > 0 ? (total_reviewed / elapsed_sec * 60.0) : 0;
+    // Review pace uses session time (from dialog open to finish), not execution time
+    double session_sec = session_timer_.elapsed() / 1000.0;
+    double files_per_min = session_sec > 0 ? (total_reviewed * 60.0 / session_sec) : 0;
     
     auto* stats_text = new QLabel(QString(
         "Total files scanned: %1\n"
@@ -1901,7 +1910,14 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
                 }
                 auto* item = table->item(row, 0);
                 if (item) {
-                    bool match = item->text().contains(filter, Qt::CaseInsensitive);
+                    QString action = item->text().toLower();
+                    // Map filter labels to action strings: "Moved"→"move", "Deleted"→"delete", "Kept"→"keep"
+                    QString expected;
+                    if (filter == "Moved") expected = "move";
+                    else if (filter == "Deleted") expected = "delete";
+                    else if (filter == "Kept") expected = "keep";
+                    else expected = filter.toLower();
+                    bool match = action.startsWith(expected);
                     table->setRowHidden(row, !match);
                 }
             }

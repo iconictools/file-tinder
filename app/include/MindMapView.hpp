@@ -5,6 +5,7 @@
 #include <QScrollArea>
 #include <QGridLayout>
 #include <QPushButton>
+#include <QLabel>
 #include <QMap>
 #include <QString>
 #include <QPoint>
@@ -118,6 +119,7 @@ private:
     bool keyboard_mode_ = false;
     int focused_index_ = -1;       // Index into ordered_paths_
     QStringList ordered_paths_;     // Paths in grid order (row-major by column)
+    QLabel* empty_label_ = nullptr; // Empty state message
     void update_focus_visual();
     void build_ordered_paths();
     void clamp_focused_index();

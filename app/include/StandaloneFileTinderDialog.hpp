@@ -15,6 +15,7 @@
 #include <QStringList>
 #include <QDateTime>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <vector>
 #include <memory>
 
@@ -150,9 +151,15 @@ protected:
     // Resize debounce timer
     QTimer* resize_timer_;
     
+    // Preview caching — avoid reloading same file on filter/sort changes
+    QString current_preview_path_;
+    
     // Close guard to prevent re-entrant close
     bool closing_ = false;
     bool animating_ = false;
+    
+    // Session timing for review pace
+    QElapsedTimer session_timer_;
     
     // Initialization
     virtual void setup_ui();
