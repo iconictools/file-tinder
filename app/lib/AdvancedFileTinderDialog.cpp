@@ -24,6 +24,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QImageReader>
+#include <QFontMetrics>
 #include <algorithm>
 
 AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
@@ -271,6 +272,17 @@ void AdvancedFileTinderDialog::setup_mind_map() {
         if (mind_map_view_) mind_map_view_->sort_by_count();
     });
     grid_toolbar->addWidget(sort_count_btn);
+    
+    // Hierarchy toggle
+    auto* hierarchy_check = new QCheckBox("Hierarchy");
+    hierarchy_check->setStyleSheet("QCheckBox { font-size: 10px; }");
+    hierarchy_check->setToolTip("Indent subfolder nodes by depth");
+    connect(hierarchy_check, &QCheckBox::toggled, this, [this](bool checked) {
+        if (mind_map_view_) {
+            mind_map_view_->set_show_hierarchy(checked);
+        }
+    });
+    grid_toolbar->addWidget(hierarchy_check);
     
     grid_toolbar->addStretch();
     
@@ -885,20 +897,21 @@ void AdvancedFileTinderDialog::remove_from_quick_access(int index) {
 void AdvancedFileTinderDialog::update_quick_access_display() {
     quick_access_list_->clear();
     
-    static const int kMaxQuickAccessNameLength = 14;
+    const int kMaxItemWidth = ui::scaling::scaled(120);
     
     for (int i = 0; i < quick_access_folders_.size(); ++i) {
         QString path = quick_access_folders_[i];
         QString folder_name = QFileInfo(path).fileName();
-        // Truncate long names to keep uniform item width
-        if (folder_name.length() > kMaxQuickAccessNameLength) {
-            folder_name = folder_name.left(kMaxQuickAccessNameLength - 1) + "…";
-        }
-        QString label = QString("%1: %2").arg(i == 9 ? 0 : i + 1).arg(folder_name);
+        QString prefix = QString("%1: ").arg(i == 9 ? 0 : i + 1);
+        // Use font metrics to elide text to fit within max width
+        QFontMetrics fm(quick_access_list_->font());
+        int available_width = kMaxItemWidth - fm.horizontalAdvance(prefix) - 16;
+        QString elided = fm.elidedText(folder_name, Qt::ElideRight, available_width);
+        QString label = prefix + elided;
         auto* item = new QListWidgetItem(label);
         item->setData(Qt::UserRole, path);
         item->setToolTip(path);
-        item->setSizeHint(QSize(ui::scaling::scaled(120), ui::scaling::scaled(28)));
+        item->setSizeHint(QSize(kMaxItemWidth, ui::scaling::scaled(28)));
         quick_access_list_->addItem(item);
     }
 }

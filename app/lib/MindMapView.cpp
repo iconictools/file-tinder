@@ -330,12 +330,25 @@ void MindMapView::place_folder_node(FolderNode* node) {
     }
     
     // Apply display mode sizing: ensure uniform row height in both modes
+    int left_margin = 0;
+    if (show_hierarchy_ && !source_path.isEmpty()) {
+        // Calculate depth relative to source path
+        QString rel = QDir(source_path).relativeFilePath(node->path);
+        int depth = rel.count('/');
+        left_margin = depth * 20;
+    }
     if (compact_mode_) {
         int w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_) : ui::scaling::scaled(120);
-        btn->setFixedSize(w, ui::scaling::scaled(32));
+        btn->setFixedSize(w + left_margin, ui::scaling::scaled(32));
+        if (left_margin > 0) {
+            btn->setContentsMargins(left_margin, 0, 0, 0);
+        }
     } else {
         int w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_) : ui::scaling::scaled(180);
-        btn->setFixedSize(w, ui::scaling::scaled(36));
+        btn->setFixedSize(w + left_margin, ui::scaling::scaled(36));
+        if (left_margin > 0) {
+            btn->setContentsMargins(left_margin, 0, 0, 0);
+        }
     }
     
     buttons_[node->path] = btn;

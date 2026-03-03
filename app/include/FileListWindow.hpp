@@ -6,6 +6,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QPushButton>
 #include <vector>
 
@@ -47,7 +48,7 @@ private:
     QStringList destination_folders_;
 
     QLineEdit* filter_edit_ = nullptr;
-    QComboBox* sort_combo_ = nullptr;
+    QCheckBox* group_by_decision_ = nullptr;
     QListWidget* list_widget_ = nullptr;
     QLabel* count_label_ = nullptr;
     QLabel* selection_label_ = nullptr;

@@ -39,6 +39,7 @@
 #include <QLocale>
 #include <QMenu>
 #include <QImageReader>
+#include <QSpinBox>
 #include <algorithm>
 
 StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_folder,
@@ -255,6 +256,41 @@ void StandaloneFileTinderDialog::setup_ui() {
             this, &StandaloneFileTinderDialog::on_folders_toggle_changed);
     filter_layout->addWidget(folders_checkbox_);
     
+    // Subfolder depth spin box
+    filter_layout->addWidget(new QLabel("Subfolder depth:"));
+    subfolder_depth_spin_ = new QSpinBox();
+    subfolder_depth_spin_->setRange(0, 5);
+    subfolder_depth_spin_->setValue(1);
+    subfolder_depth_spin_->setMaximumWidth(50);
+    subfolder_depth_spin_->setToolTip("How many levels of subfolders to include (0 = top-level only)");
+    subfolder_depth_spin_->setEnabled(false);
+    connect(folders_checkbox_, &QCheckBox::toggled, subfolder_depth_spin_, &QSpinBox::setEnabled);
+    connect(subfolder_depth_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+        if (val == 0) {
+            auto reply = QMessageBox::question(this, "Flatten Files",
+                "Depth 0 will flatten all files into one list. Continue?",
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply != QMessageBox::Yes) {
+                subfolder_depth_spin_->blockSignals(true);
+                subfolder_depth_spin_->setValue(1);
+                subfolder_depth_spin_->blockSignals(false);
+                return;
+            }
+        } else if (val > 2) {
+            auto reply = QMessageBox::question(this, "Deep Scan",
+                "Depth > 2 may include a very large number of files. Continue?",
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply != QMessageBox::Yes) {
+                subfolder_depth_spin_->blockSignals(true);
+                subfolder_depth_spin_->setValue(2);
+                subfolder_depth_spin_->blockSignals(false);
+                return;
+            }
+        }
+        rebuild_filtered_indices();
+        show_current_file();
+    });
+    
     filter_layout->addSpacing(20);
     
     // Sort
@@ -285,6 +321,20 @@ void StandaloneFileTinderDialog::setup_ui() {
     );
     connect(sort_order_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_sort_order_toggled);
     filter_layout->addWidget(sort_order_btn_);
+    
+    // Preview toggle checkbox (near sort controls)
+    preview_btn_ = new QPushButton("Preview");
+    preview_btn_->setFixedHeight(ui::scaling::scaled(28));
+    preview_btn_->setCheckable(true);
+    preview_btn_->setChecked(true);
+    preview_btn_->setStyleSheet(
+        "QPushButton { font-size: 11px; padding: 4px 8px; "
+        "background-color: #34495e; border-radius: 4px; color: white; }"
+        "QPushButton:hover { background-color: #3d566e; }"
+        "QPushButton:checked { background-color: #2980b9; border: 2px solid #1abc9c; }"
+    );
+    connect(preview_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_show_preview);
+    filter_layout->addWidget(preview_btn_);
     
     filter_layout->addStretch();
     main_layout->addWidget(filter_bar);
@@ -454,20 +504,6 @@ void StandaloneFileTinderDialog::setup_ui() {
     connect(redo_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_redo);
     bottom_layout->addWidget(redo_btn_);
     
-    // Preview toggle (toggles inline preview in basic mode)
-    preview_btn_ = new QPushButton("Preview [P]");
-    preview_btn_->setFixedHeight(ui::scaling::scaled(36));
-    preview_btn_->setCheckable(true);
-    preview_btn_->setChecked(true);
-    preview_btn_->setStyleSheet(QString(
-        "QPushButton { font-size: 12px; padding: 8px 15px; "
-        "background-color: %1; border-radius: 4px; color: white; }"
-        "QPushButton:hover { background-color: #2980b9; }"
-        "QPushButton:checked { background-color: #2980b9; border: 2px solid #1abc9c; }"
-    ).arg(ui::colors::kMoveColor));
-    connect(preview_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_show_preview);
-    bottom_layout->addWidget(preview_btn_);
-    
     // Reset Progress button
     auto* reset_btn = new QPushButton("Reset");
     reset_btn->setFixedHeight(ui::scaling::scaled(36));
@@ -592,25 +628,20 @@ void StandaloneFileTinderDialog::scan_files() {
         filters |= QDir::Dirs;
     }
     
-    QStringList entries = dir.entryList(filters);
-    
-    // Show progress for large directories (>200 files)
-    const bool show_progress = entries.size() > 200;
-    QProgressDialog* progress = nullptr;
-    if (show_progress) {
-        progress = new QProgressDialog("Scanning files...", QString(), 0, entries.size(), this);
-        progress->setWindowModality(Qt::WindowModal);
-        progress->setMinimumDuration(0);
-        progress->show();
+    // Determine subfolder depth for recursion
+    int max_depth = 0;
+    if (include_folders_ && subfolder_depth_spin_) {
+        max_depth = subfolder_depth_spin_->value();
     }
-    
-    for (int idx = 0; idx < entries.size(); ++idx) {
-        const QString& entry = entries[idx];
-        try {
-            QString full_path = dir.absoluteFilePath(entry);
+
+    // Recursive lambda to scan at controlled depth
+    std::function<void(const QDir&, int)> scan_dir = [&](const QDir& current_dir, int depth) {
+        QStringList dir_entries = current_dir.entryList(filters);
+        for (const QString& entry : dir_entries) {
+            QString full_path = current_dir.absoluteFilePath(entry);
             QFileInfo info(full_path);
             QMimeType mime_type = mime_db.mimeTypeForFile(full_path);
-            
+
             FileToProcess file;
             file.path = full_path;
             file.name = info.fileName();
@@ -621,16 +652,27 @@ void StandaloneFileTinderDialog::scan_files() {
             file.decision = "pending";
             file.mime_type = mime_type.name();
             file.is_directory = info.isDir();
-            
             files_.push_back(file);
-        } catch (const std::exception& ex) {
-            LOG_ERROR("BasicMode", QString("Error scanning file %1: %2").arg(entry, ex.what()));
+
+            // Recurse into subdirectories if within depth limit
+            if (info.isDir() && depth < max_depth) {
+                scan_dir(QDir(full_path), depth + 1);
+            }
         }
-        
-        if (progress && (idx % 50 == 0)) {
-            progress->setValue(idx);
-            QApplication::processEvents();
-        }
+    };
+
+    scan_dir(dir, 0);
+    
+    // Show progress for large directories (>200 files)
+    const bool show_progress = files_.size() > 200;
+    QProgressDialog* progress = nullptr;
+    if (show_progress) {
+        progress = new QProgressDialog("Scanning files...", QString(), 0, static_cast<int>(files_.size()), this);
+        progress->setWindowModality(Qt::WindowModal);
+        progress->setMinimumDuration(0);
+        progress->show();
+        progress->setValue(static_cast<int>(files_.size()));
+        QApplication::processEvents();
     }
     
     delete progress;
@@ -1362,11 +1404,11 @@ void StandaloneFileTinderDialog::show_review_summary() {
     auto* review_sort_combo = new QComboBox();
     review_sort_combo->addItems({"Original Order", "By Name", "By Decision", "By Destination"});
     review_filter_layout->addWidget(review_sort_combo);
-    review_filter_layout->addStretch();
     auto* preview_toggle = new QCheckBox("Preview on hover");
     preview_toggle->setChecked(false);
     preview_toggle->setToolTip("Show file details when hovering over rows");
     review_filter_layout->addWidget(preview_toggle);
+    review_filter_layout->addStretch();
     layout->addLayout(review_filter_layout);
     
     // Determine mode name for this dialog
@@ -1495,6 +1537,9 @@ void StandaloneFileTinderDialog::show_review_summary() {
         visible_row++;
     }
     
+    // Enable column header click sorting after all rows are populated
+    table->setSortingEnabled(true);
+
     layout->addWidget(table, 1);
 
     // Connect preview-on-hover toggle

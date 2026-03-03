@@ -70,6 +70,7 @@ public:
     QString folder_purpose() const;
     AiProviderConfig provider_config() const;
     int confidence_threshold() const;
+    int category_limit() const;
 
 private:
     void build_ui();
@@ -93,6 +94,8 @@ private:
     QSpinBox* semi_count_spin_;
     QComboBox* category_combo_;
     QSpinBox* depth_spin_;
+    QCheckBox* category_limit_check_ = nullptr;
+    QSpinBox* category_limit_spin_ = nullptr;
     QTextEdit* purpose_edit_;
     QLabel* cost_label_;
     QNetworkAccessManager* fetch_nam_;
@@ -119,6 +122,7 @@ private:
     AiCategoryMode category_mode_;
     int semi_count_;
     int category_depth_;
+    int category_limit_ = 0;
     QString folder_purpose_;
     AiProviderConfig provider_config_;
     std::vector<AiFileSuggestion> suggestions_;
@@ -139,6 +143,7 @@ private:
 
     QWidget* ai_suggestions_panel_ = nullptr;
     QListWidget* ai_suggestions_list_ = nullptr;
+    QPushButton* ai_other_btn_ = nullptr;
     QLabel* ai_reasoning_label_ = nullptr;
     QCheckBox* ai_reasoning_toggle_ = nullptr;
     int confidence_threshold_ = 0;

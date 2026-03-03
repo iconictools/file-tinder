@@ -92,6 +92,7 @@ private:
     int path_display_mode_ = 0;  // 0=off, 1=paths, 2=full paths
     int custom_width_ = 0;  // 0 = use compact/expanded defaults
     bool row_major_ = false;  // false = column-major (top-to-bottom), true = row-major (left-to-right)
+    bool show_hierarchy_ = false;  // Indent subfolders by depth
     
     void build_grid();
     void place_folder_node(FolderNode* node);
@@ -107,6 +108,8 @@ public:
     int custom_width() const { return custom_width_; }
     void set_row_major(bool rm) { row_major_ = rm; }
     bool row_major() const { return row_major_; }
+    void set_show_hierarchy(bool h) { show_hierarchy_ = h; build_grid(); }
+    bool show_hierarchy() const { return show_hierarchy_; }
     void sort_alphabetically();
     void sort_by_count();
 

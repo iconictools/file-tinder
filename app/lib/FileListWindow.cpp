@@ -12,6 +12,7 @@
 #include <QApplication>
 #include <QMouseEvent>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLocale>
 
 static const int kFileIndexRole = Qt::UserRole + 200;
@@ -45,12 +46,10 @@ void FileListWindow::build_ui() {
     connect(filter_edit_, &QLineEdit::textChanged, this, &FileListWindow::on_filter_changed);
     filter_row->addWidget(filter_edit_);
 
-    sort_combo_ = new QComboBox();
-    sort_combo_->addItems({"Name", "Decision", "Extension"});
-    sort_combo_->setMaximumWidth(100);
-    sort_combo_->setToolTip("Sort files in list");
-    connect(sort_combo_, &QComboBox::currentTextChanged, this, [this]() { update_list(); });
-    filter_row->addWidget(sort_combo_);
+    group_by_decision_ = new QCheckBox("Group by decision");
+    group_by_decision_->setToolTip("Group files by their decision status");
+    connect(group_by_decision_, &QCheckBox::toggled, this, [this]() { update_list(); });
+    filter_row->addWidget(group_by_decision_);
 
     layout->addLayout(filter_row);
 
@@ -193,34 +192,18 @@ void FileListWindow::update_list() {
         ++shown;
     }
 
-    // Sort based on combo selection
-    if (sort_combo_ && sort_combo_->currentText() != "Name") {
-        QString sort_key = sort_combo_->currentText();
-        list_widget_->sortItems(Qt::AscendingOrder);
-        if (sort_key == "Decision") {
-            // Stable sort by extracting decision prefix
-            QList<QListWidgetItem*> items;
-            while (list_widget_->count())
-                items.append(list_widget_->takeItem(0));
-            std::stable_sort(items.begin(), items.end(), [this](QListWidgetItem* a, QListWidgetItem* b) {
-                int fi_a = a->data(kFileIndexRole).toInt();
-                int fi_b = b->data(kFileIndexRole).toInt();
-                return files_[fi_a].decision < files_[fi_b].decision;
-            });
-            for (auto* it : items)
-                list_widget_->addItem(it);
-        } else if (sort_key == "Extension") {
-            QList<QListWidgetItem*> items;
-            while (list_widget_->count())
-                items.append(list_widget_->takeItem(0));
-            std::stable_sort(items.begin(), items.end(), [this](QListWidgetItem* a, QListWidgetItem* b) {
-                int fi_a = a->data(kFileIndexRole).toInt();
-                int fi_b = b->data(kFileIndexRole).toInt();
-                return files_[fi_a].extension.toLower() < files_[fi_b].extension.toLower();
-            });
-            for (auto* it : items)
-                list_widget_->addItem(it);
-        }
+    // Sort based on group-by-decision checkbox
+    if (group_by_decision_ && group_by_decision_->isChecked()) {
+        QList<QListWidgetItem*> items;
+        while (list_widget_->count())
+            items.append(list_widget_->takeItem(0));
+        std::stable_sort(items.begin(), items.end(), [this](QListWidgetItem* a, QListWidgetItem* b) {
+            int fi_a = a->data(kFileIndexRole).toInt();
+            int fi_b = b->data(kFileIndexRole).toInt();
+            return files_[fi_a].decision < files_[fi_b].decision;
+        });
+        for (auto* it : items)
+            list_widget_->addItem(it);
     }
 
     count_label_->setText(QString("%1 / %2 files").arg(shown).arg(filtered_indices_.size()));

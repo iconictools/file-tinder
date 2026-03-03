@@ -11,6 +11,7 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QCheckBox>
+#include <QSpinBox>
 #include <QString>
 #include <QStringList>
 #include <QDateTime>
@@ -128,6 +129,7 @@ protected:
     QComboBox* sort_combo_;        // Sort field selector
     QPushButton* sort_order_btn_;  // Asc/Desc toggle
     QCheckBox* folders_checkbox_;  // Include folders toggle
+    QSpinBox* subfolder_depth_spin_ = nullptr;  // Subfolder recursion depth
     QLabel* shortcuts_label_;
     QLabel* file_position_label_;
     QLabel* size_badge_label_;

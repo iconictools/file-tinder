@@ -328,6 +328,21 @@ void AiSetupDialog::build_ui() {
     depth_row->addStretch();
     cat_layout->addLayout(depth_row);
 
+    // Category limit option
+    auto* limit_row = new QHBoxLayout();
+    category_limit_check_ = new QCheckBox("Limit categories");
+    category_limit_check_->setToolTip("Cap the number of categories AI will create");
+    limit_row->addWidget(category_limit_check_);
+    category_limit_spin_ = new QSpinBox();
+    category_limit_spin_->setRange(2, 50);
+    category_limit_spin_->setValue(10);
+    category_limit_spin_->setEnabled(false);
+    category_limit_spin_->setToolTip("Maximum number of categories");
+    connect(category_limit_check_, &QCheckBox::toggled, category_limit_spin_, &QSpinBox::setEnabled);
+    limit_row->addWidget(category_limit_spin_);
+    limit_row->addStretch();
+    cat_layout->addLayout(limit_row);
+
     main_layout->addWidget(cat_group);
 
     // ── Purpose (optional) ──
@@ -633,6 +648,13 @@ int AiSetupDialog::confidence_threshold() const {
     return 0;
 }
 
+int AiSetupDialog::category_limit() const {
+    if (category_limit_check_ && category_limit_check_->isChecked()) {
+        return category_limit_spin_->value();
+    }
+    return 0;
+}
+
 // ============================================================
 // AiFileTinderDialog
 // ============================================================
@@ -838,6 +860,37 @@ void AiFileTinderDialog::initialize() {
         });
         ai_sugg_layout->addWidget(ai_suggestions_list_, 1);
 
+        // "Other" button to pick any folder from the grid
+        ai_other_btn_ = new QPushButton("Other");
+        ai_other_btn_->setFixedHeight(28);
+        ai_other_btn_->setMaximumWidth(60);
+        ai_other_btn_->setToolTip("Choose a different folder from the grid");
+        ai_other_btn_->setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 2px 8px; "
+            "background-color: #34495e; border-radius: 3px; color: #bdc3c7; }"
+            "QPushButton:hover { background-color: #3d566e; }"
+        );
+        connect(ai_other_btn_, &QPushButton::clicked, this, [this]() {
+            QStringList all_folders;
+            if (folder_model_) {
+                all_folders = folder_model_->get_all_folder_paths();
+            }
+            if (all_folders.isEmpty()) return;
+            QMenu menu(this);
+            for (const QString& fp : all_folders) {
+                QString label = QFileInfo(fp).fileName();
+                if (label.isEmpty()) label = fp;
+                auto* action = menu.addAction(label);
+                action->setData(fp);
+                action->setToolTip(fp);
+            }
+            auto* chosen = menu.exec(ai_other_btn_->mapToGlobal(QPoint(0, ai_other_btn_->height())));
+            if (chosen && chosen->data().isValid()) {
+                on_folder_clicked_from_ai(chosen->data().toString());
+            }
+        });
+        ai_sugg_layout->addWidget(ai_other_btn_);
+
         // Insert after the mind map / before the quick access panel
         if (main_layout->count() > 2) {
             main_layout->insertWidget(main_layout->count() - 2, ai_suggestions_panel_);
@@ -869,6 +922,7 @@ bool AiFileTinderDialog::show_ai_setup() {
     semi_count_ = setup.semi_mode_count();
     category_mode_ = setup.category_mode();
     category_depth_ = setup.category_depth();
+    category_limit_ = setup.category_limit();
     folder_purpose_ = setup.folder_purpose();
     provider_config_ = setup.provider_config();
     confidence_threshold_ = setup.confidence_threshold();
@@ -1374,6 +1428,10 @@ QString AiFileTinderDialog::build_analysis_prompt(const QStringList& file_descri
             prompt += QString("Maximum subcategory depth: %1 levels. ").arg(category_depth_);
             prompt += "Create as many categories as needed for accurate organization.\n";
             break;
+    }
+
+    if (category_limit_ > 0) {
+        prompt += QString("Create at most %1 categories.\n").arg(category_limit_);
     }
 
     if (!folder_purpose_.isEmpty()) {
