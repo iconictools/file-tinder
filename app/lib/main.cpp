@@ -679,7 +679,6 @@ private:
     }
     
     void destroy_all_mode_widgets() {
-        // Use a cast-safe approach for derived types
         if (basic_widget_) {
             stack_->removeWidget(basic_widget_);
             basic_widget_->deleteLater();

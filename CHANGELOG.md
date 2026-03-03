@@ -31,6 +31,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Session persistence**: `decided_in_mode` field persisted to database; `copy` decision type supported; multiple source folders saved and restored on session resume
 
 ### Changed
+- **Unified single-window architecture**: All three mode dialogs converted from `QDialog` to `QWidget`; launcher uses `QStackedWidget` so mode switching swaps pages in-place instead of opening/closing separate windows
 - **"Skip" renamed to "Sort Later"** across all modes, DB schema, UI labels, keyboard shortcuts, and filters — now moves file to END of the filtered list instead of just skipping it
 - **Redo functionality (Y key)** added alongside undo (Z) — standard undo/redo stack pattern
 - **Review summary shows ALL files** including pending (displayed in gray `#888`)
@@ -72,6 +73,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `DiagnosticTool` — replaced by UserDataDialog
 - 15+ unused `ui_constants.hpp` entries (kNodeWidth, kNodeHeight, kNodeBorderRadius, kFolderTreePanel*, node colors, font sizes)
 - `open_diagnostics()` reference removed from launcher
+- `QDialog::exec()` / `done()` / `reject()` modal pattern — replaced by `QStackedWidget` page switching
+- `QTimer::singleShot` mode-switch hack — no longer needed without recursive `exec()`
 
 ---
 

@@ -95,6 +95,7 @@ All three modes share the same session state, so you can switch between them fre
 - **Column sorting**: Sort by any column in the duplicate tree
 
 ### Launcher / Main Screen
+- **Single-window architecture**: All modes run inside one window via QStackedWidget — no separate windows or flicker when switching modes
 - **Mode selection**: Basic, Advanced, or AI mode
 - **Multiple folders**: Toggle to add multiple source folders to a single session
 - **Recent folders**: Quick access to previously used source folders (middle-click to remove)
