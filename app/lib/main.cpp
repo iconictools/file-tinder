@@ -68,13 +68,9 @@ public:
         QString last_folder = settings.value("lastFolder").toString();
         if (!last_folder.isEmpty() && QDir(last_folder).exists()) {
             chosen_path_ = last_folder;
-            source_folders_ = {last_folder};
-            
-            // Restore additional source folders from DB
+            // Restore additional source folders from DB, fall back to primary folder
             QStringList saved_folders = db_manager_.get_source_folders(last_folder);
-            if (!saved_folders.isEmpty()) {
-                source_folders_ = saved_folders;
-            }
+            source_folders_ = saved_folders.isEmpty() ? QStringList{last_folder} : saved_folders;
             
             path_indicator_->setText(last_folder);
             path_indicator_->setStyleSheet(

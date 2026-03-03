@@ -236,8 +236,9 @@ File Tinder uses SQLite for session persistence. The database is stored in:
 CREATE TABLE file_tinder_state (
     folder_path TEXT NOT NULL,
     file_path TEXT NOT NULL,
-    decision TEXT NOT NULL CHECK (decision IN ('pending', 'keep', 'delete', 'sort_later', 'move')),
+    decision TEXT NOT NULL,
     destination_folder TEXT,
+    decided_in_mode TEXT,
     timestamp DATETIME,
     UNIQUE(folder_path, file_path)
 );
@@ -294,6 +295,14 @@ CREATE TABLE execution_log (
     source_path TEXT NOT NULL,
     dest_path TEXT,
     timestamp DATETIME
+);
+
+-- Session source folders (multiple folder support)
+CREATE TABLE session_source_folders (
+    session_folder TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    UNIQUE(session_folder, source_path)
 );
 ```
 

@@ -19,6 +19,7 @@
 #include <QApplication>
 
 static const int kAnalysisTimeoutMs = 90000;
+static const int kLocalAnalysisTimeoutMs = 120000;
 
 UserDataDialog::UserDataDialog(DatabaseManager& db, QWidget* parent)
     : QDialog(parent)
@@ -272,7 +273,7 @@ void UserDataDialog::send_analysis_request(const QString& prompt) {
     QUrl url(endpoint_url);
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setTransferTimeout(is_local ? 120000 : kAnalysisTimeoutMs);
+    request.setTransferTimeout(is_local ? kLocalAnalysisTimeoutMs : kAnalysisTimeoutMs);
 
     // Auth headers
     if (!api_key.isEmpty()) {

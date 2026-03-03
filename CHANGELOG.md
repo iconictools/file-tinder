@@ -192,8 +192,10 @@ Initial release of File Tinder — a desktop file organizer built with Qt 6 and 
 - **Grid save/load** with session metadata and source folder prompts
 - **ManualEditDialog**: Tree/text toggle, middle-click delete, batch operations, add folders/subfolders
 - Quick Access hidden in AI mode; AI Suggestions always visible
+- **Multiple folders source selection**: Checkbox in launcher enables multi-folder mode; add/remove folders via list widget; files scanned from all selected folders; primary source used as session key
+- **User Data screen**: Replaces DiagnosticTool; Activity Log tab shows all execution history from database; AI Analysis tab generates personality insights and file organization recommendations using configured AI provider
+- **Session persistence**: `decided_in_mode` field persisted to database; `copy` decision type supported; multiple source folders saved and restored on session resume
 
-- **User Data screen**: Replaces DiagnosticTool. Activity Log tab shows all execution history. AI Analysis tab uses configured AI provider to generate personality insights and file organization recommendations.
 ### Changed
 - **"Skip" renamed to "Sort Later"** across all modes, DB schema, UI labels, keyboard shortcuts, and filters — now moves file to END of the filtered list instead of just skipping it
 - **Redo functionality (Y key)** added alongside undo (Z) — standard undo/redo stack pattern

@@ -43,6 +43,7 @@ bool DatabaseManager::create_tables() {
     QStringList queries;
     
     // File Tinder state table
+    // Valid decision values: pending, keep, delete, sort_later, move, copy
     queries << R"(
         CREATE TABLE IF NOT EXISTS file_tinder_state (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,8 +125,13 @@ bool DatabaseManager::create_tables() {
     // Migration: add decided_in_mode column if it doesn't exist (for existing DBs)
     {
         QSqlQuery q(db_);
-        q.exec("ALTER TABLE file_tinder_state ADD COLUMN decided_in_mode TEXT");
-        // Ignore error -- column may already exist
+        if (!q.exec("ALTER TABLE file_tinder_state ADD COLUMN decided_in_mode TEXT")) {
+            QString err = q.lastError().text().toLower();
+            // Only log if it's NOT a "duplicate column" error (expected for already-migrated DBs)
+            if (!err.contains("duplicate") && !err.contains("already exists")) {
+                qWarning() << "Migration warning (decided_in_mode):" << q.lastError().text();
+            }
+        }
     }
     
     // Session source folders table (multi-folder persistence)
