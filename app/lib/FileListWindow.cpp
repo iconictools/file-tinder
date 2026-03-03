@@ -253,6 +253,37 @@ void FileListWindow::on_item_clicked(QListWidgetItem* item) {
     emit file_selected(filtered_idx);
 }
 
+void FileListWindow::update_item_status(int file_index) {
+    if (!list_widget_) return;
+    if (file_index < 0 || file_index >= static_cast<int>(files_.size())) return;
+    for (int i = 0; i < list_widget_->count(); ++i) {
+        auto* item = list_widget_->item(i);
+        if (item && item->data(kFileIndexRole).toInt() == file_index) {
+            const auto& file = files_[file_index];
+            QString status;
+            if (file.decision == "keep") status = "[K]";
+            else if (file.decision == "delete") status = "[D]";
+            else if (file.decision == "sort_later") status = "[L]";
+            else if (file.decision == "move") status = "[M]";
+            else if (file.decision == "copy") status = "[C]";
+            else status = "[ ]";
+
+            QString display = QString("%1 %2 (%3)").arg(status, file.name,
+                QLocale().formattedDataSize(file.size, 1, QLocale::DataSizeTraditionalFormat));
+            item->setText(display);
+
+            if (file.decision == "keep") item->setForeground(QColor("#2ecc71"));
+            else if (file.decision == "delete") item->setForeground(QColor("#e74c3c"));
+            else if (file.decision == "sort_later") item->setForeground(QColor("#95a5a6"));
+            else if (file.decision == "move") item->setForeground(QColor("#3498db"));
+            else if (file.decision == "copy") item->setForeground(QColor("#9b59b6"));
+            else item->setForeground(QColor("#bdc3c7"));
+
+            break;
+        }
+    }
+}
+
 void FileListWindow::on_item_double_clicked(QListWidgetItem* item) {
     if (!item) return;
     int filtered_idx = item->data(Qt::UserRole + 201).toInt();

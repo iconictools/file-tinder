@@ -26,6 +26,7 @@ protected:
     MindMapView* mind_map_view_;
     QListWidget* quick_access_list_;
     FolderTreeModel* folder_model_;
+    QWidget* quick_access_panel_;
 
 private:
     // Advanced mode internal components
@@ -36,7 +37,6 @@ private:
     QLabel* file_name_label_;
     QLabel* file_details_label_;
     QLabel* adv_preview_label_;     // Small inline image preview
-    QWidget* quick_access_panel_;
     FilterWidget* filter_widget_;
     
     // Quick access management

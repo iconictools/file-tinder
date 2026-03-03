@@ -17,6 +17,7 @@
 #include <QDateTime>
 #include <QTimer>
 #include <QElapsedTimer>
+#include <QPointer>
 #include <vector>
 #include <memory>
 
@@ -24,6 +25,7 @@ class DatabaseManager;
 class QPropertyAnimation;
 class QGraphicsOpacityEffect;
 class ImagePreviewWindow;
+class FileListWindow;
 struct ExecutionResult;
 
 // Action record for undo functionality
@@ -121,6 +123,9 @@ protected:
     
     // Image preview window (for separate window mode)
     ImagePreviewWindow* image_preview_window_;
+
+    // File list window (for real-time status updates)
+    QPointer<FileListWindow> file_list_window_;
     
     // UI Components
     QLabel* preview_label_;

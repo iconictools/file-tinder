@@ -501,6 +501,28 @@ void MindMapView::sort_by_count() {
     refresh_layout();
 }
 
+void MindMapView::swap_nodes(int idx_a, int idx_b) {
+    build_ordered_paths();
+    if (idx_a < 0 || idx_a >= ordered_paths_.size()) return;
+    if (idx_b < 0 || idx_b >= ordered_paths_.size()) return;
+    if (idx_a == idx_b) return;
+
+    // Swap in ordered_paths_
+    ordered_paths_.swapItemsAt(idx_a, idx_b);
+
+    // Swap grid positions
+    QString path_a = ordered_paths_[idx_a];
+    QString path_b = ordered_paths_[idx_b];
+    if (grid_positions_.contains(path_a) && grid_positions_.contains(path_b)) {
+        auto pos_a = grid_positions_[path_a];
+        auto pos_b = grid_positions_[path_b];
+        grid_positions_[path_a] = pos_b;
+        grid_positions_[path_b] = pos_a;
+    }
+
+    build_grid();
+}
+
 void MindMapView::set_highlighted_paths(const QStringList& paths) {
     highlighted_paths_ = paths;
     for (auto it = buttons_.begin(); it != buttons_.end(); ++it) {

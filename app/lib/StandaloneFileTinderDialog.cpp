@@ -554,13 +554,14 @@ void StandaloneFileTinderDialog::setup_ui() {
     file_list_btn->setToolTip("Open file list window (multi-select, drag to folders)");
     connect(file_list_btn, &QPushButton::clicked, this, [this]() {
         auto* flw = new FileListWindow(files_, filtered_indices_, current_filtered_index_, this);
+        file_list_window_ = flw;
         connect(flw, &FileListWindow::file_selected, this, [this](int filtered_idx) {
             if (filtered_idx >= 0 && filtered_idx < static_cast<int>(filtered_indices_.size())) {
                 current_filtered_index_ = filtered_idx;
                 show_current_file();
             }
         });
-        connect(flw, &FileListWindow::files_assigned, this, [this](const QList<int>& indices, const QString& dest) {
+        connect(flw, &FileListWindow::files_assigned, this, [this, flw](const QList<int>& indices, const QString& dest) {
             for (int fi : indices) {
                 if (fi >= 0 && fi < static_cast<int>(files_.size())) {
                     auto& file = files_[fi];
@@ -570,13 +571,14 @@ void StandaloneFileTinderDialog::setup_ui() {
                     update_decision_count(old_decision, -1);
                     move_count_++;
                     record_action(fi, old_decision, "move", dest);
+                    flw->update_item_status(fi);
                 }
             }
             update_progress();
             update_stats();
             show_current_file();
         });
-        connect(flw, &FileListWindow::files_decision_changed, this, [this](const QList<int>& indices, const QString& decision) {
+        connect(flw, &FileListWindow::files_decision_changed, this, [this, flw](const QList<int>& indices, const QString& decision) {
             for (int fi : indices) {
                 if (fi >= 0 && fi < static_cast<int>(files_.size())) {
                     auto& file = files_[fi];
@@ -586,6 +588,7 @@ void StandaloneFileTinderDialog::setup_ui() {
                     file.decision = decision;
                     update_decision_count(decision, 1);
                     record_action(fi, old_decision, decision, file.destination_folder);
+                    flw->update_item_status(fi);
                 }
             }
             update_progress();
@@ -725,6 +728,7 @@ void StandaloneFileTinderDialog::load_session_state() {
                 else if (decision.decision == "delete") delete_count_++;
                 else if (decision.decision == "sort_later") sort_later_count_++;
                 else if (decision.decision == "move") move_count_++;
+                else if (decision.decision == "copy") copy_count_++;
                 
                 break;
             }
@@ -1011,6 +1015,9 @@ void StandaloneFileTinderDialog::on_keep() {
         
         // Record for undo
         record_action(file_idx, old_decision, "keep");
+
+        // Update file list window in real time
+        if (file_list_window_) file_list_window_->update_item_status(file_idx);
         
         // Visual feedback: brief flash on stats
         if (progress_label_) {
@@ -1046,6 +1053,9 @@ void StandaloneFileTinderDialog::on_delete() {
         
         // Record for undo
         record_action(file_idx, old_decision, "delete");
+
+        // Update file list window in real time
+        if (file_list_window_) file_list_window_->update_item_status(file_idx);
         
         // Visual feedback
         if (progress_label_) {
@@ -1081,6 +1091,9 @@ void StandaloneFileTinderDialog::on_sort_later() {
         
         // Record for undo
         record_action(file_idx, old_decision, "sort_later");
+
+        // Update file list window in real time
+        if (file_list_window_) file_list_window_->update_item_status(file_idx);
         
         // Visual feedback
         if (progress_label_) {
@@ -2098,13 +2111,14 @@ void StandaloneFileTinderDialog::keyPressEvent(QKeyEvent* event) {
                 // F opens File List window (same as clicking "File List" button)
                 {
                     auto* flw = new FileListWindow(files_, filtered_indices_, current_filtered_index_, this);
+                    file_list_window_ = flw;
                     connect(flw, &FileListWindow::file_selected, this, [this](int filtered_idx) {
                         if (filtered_idx >= 0 && filtered_idx < static_cast<int>(filtered_indices_.size())) {
                             current_filtered_index_ = filtered_idx;
                             show_current_file();
                         }
                     });
-                    connect(flw, &FileListWindow::files_assigned, this, [this](const QList<int>& indices, const QString& dest) {
+                    connect(flw, &FileListWindow::files_assigned, this, [this, flw](const QList<int>& indices, const QString& dest) {
                         for (int fi : indices) {
                             if (fi >= 0 && fi < static_cast<int>(files_.size())) {
                                 auto& file = files_[fi];
@@ -2114,6 +2128,7 @@ void StandaloneFileTinderDialog::keyPressEvent(QKeyEvent* event) {
                                 update_decision_count(old_decision, -1);
                                 move_count_++;
                                 record_action(fi, old_decision, "move", dest);
+                                flw->update_item_status(fi);
                             }
                         }
                         update_progress();

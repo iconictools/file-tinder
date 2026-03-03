@@ -123,6 +123,7 @@ public:
     int custom_height() const { return custom_height_; }
     void sort_alphabetically();
     void sort_by_count();
+    void swap_nodes(int idx_a, int idx_b);
 
     // AI glow highlighting
     void set_highlighted_paths(const QStringList& paths);

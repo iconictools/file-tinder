@@ -1,4 +1,5 @@
 #include "AdvancedFileTinderDialog.hpp"
+#include "FileListWindow.hpp"
 #include "FolderTreeModel.hpp"
 #include "MindMapView.hpp"
 #include "FilterWidget.hpp"
@@ -20,6 +21,7 @@
 #include <QDir>
 #include <QMimeDatabase>
 #include <QSettings>
+#include <QDateTime>
 #include <QScreen>
 #include <QDesktopServices>
 #include <QUrl>
@@ -668,6 +670,9 @@ void AdvancedFileTinderDialog::on_folder_clicked(const QString& folder_path) {
     
     // Record for undo (store the OLD destination so it can be restored)
     record_action(file_idx, old_decision, "move", old_dest_folder);
+
+    // Update file list window in real time
+    if (file_list_window_) file_list_window_->update_item_status(file_idx);
     
     if (folder_model_) folder_model_->assign_file_to_folder(folder_path);
     if (mind_map_view_) mind_map_view_->set_selected_folder(folder_path);
@@ -1457,10 +1462,23 @@ void AdvancedFileTinderDialog::save_grid_config() {
     paths.append(QString("__meta__rows=%1").arg(rows));
     paths.append(QString("__meta__width=%1").arg(custom_w));
     paths.append(QString("__meta__fullpaths=%1").arg(path_mode));
+
+    // Session metadata
+    paths.append(QString("__meta__source=%1").arg(source_folder_));
+    paths.append(QString("__meta__file_count=%1").arg(static_cast<int>(files_.size())));
+    paths.append(QString("__meta__timestamp=%1").arg(QDateTime::currentDateTime().toString(Qt::ISODate)));
+
+    // Track which folders are virtual
+    for (const QString& p : folder_model_->get_all_folder_paths()) {
+        if (!QDir(p).exists()) {
+            paths.append(QString("__meta__virtual=%1").arg(p));
+        }
+    }
     
     db_.save_grid_config(source_folder_, name, paths);
+    int folder_count = folder_model_->get_all_folder_paths().size();
     QMessageBox::information(this, "Saved", QString("Grid configuration '%1' saved with %2 folder(s).")
-        .arg(name).arg(paths.size()));
+        .arg(name).arg(folder_count));
 }
 
 void AdvancedFileTinderDialog::load_grid_config() {
@@ -1484,6 +1502,7 @@ void AdvancedFileTinderDialog::load_grid_config() {
     int meta_rows = 6;
     int meta_width = 0;
     int meta_fullpaths = 0;
+    QString meta_source;
     QStringList folder_paths;
     for (const QString& p : paths) {
         if (p.startsWith("__meta__")) {
@@ -1492,8 +1511,31 @@ void AdvancedFileTinderDialog::load_grid_config() {
             else if (p.startsWith("__meta__rows=")) meta_rows = p.mid(13).toInt();
             else if (p.startsWith("__meta__width=")) meta_width = p.mid(14).toInt();
             else if (p.startsWith("__meta__fullpaths=")) meta_fullpaths = p.mid(18).toInt();
+            else if (p.startsWith("__meta__source=")) meta_source = p.mid(15);
         } else {
             folder_paths.append(p);
+        }
+    }
+
+    // Warn if config was saved for a different source folder
+    if (!meta_source.isEmpty() && meta_source != source_folder_) {
+        auto reply = QMessageBox::question(this, "Different Source Folder",
+            QString("This grid was saved for a different folder:\n%1\n\n"
+                    "Current folder:\n%2\n\n"
+                    "Load anyway?").arg(meta_source, source_folder_),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (reply != QMessageBox::Yes) return;
+    } else {
+        // Same source folder — offer to save current grid first
+        QStringList current_folders;
+        if (folder_model_) current_folders = folder_model_->get_all_folder_paths();
+        if (!current_folders.isEmpty()) {
+            auto reply = QMessageBox::question(this, "Save Current Grid",
+                "Save current grid before loading?",
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                QMessageBox::Save);
+            if (reply == QMessageBox::Cancel) return;
+            if (reply == QMessageBox::Save) save_grid_config();
         }
     }
     

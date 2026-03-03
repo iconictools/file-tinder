@@ -29,6 +29,7 @@ public:
 
     void refresh(const std::vector<int>& filtered_indices, int current_index);
     void set_destination_folders(const QStringList& folders);
+    void update_item_status(int file_index);
 
 signals:
     void file_selected(int filtered_index);

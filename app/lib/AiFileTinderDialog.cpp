@@ -683,6 +683,11 @@ AiFileTinderDialog::~AiFileTinderDialog() = default;
 void AiFileTinderDialog::initialize() {
     AdvancedFileTinderDialog::initialize();
 
+    // Hide Quick Access panel in AI mode — AI Suggestions replaces it
+    if (quick_access_panel_) {
+        quick_access_panel_->setVisible(false);
+    }
+
     // Replace the "Basic Mode" switch button with a mode menu for AI mode
     if (switch_mode_btn_) {
         switch_mode_btn_->disconnect();
@@ -834,7 +839,7 @@ void AiFileTinderDialog::initialize() {
 
         // Create separate "AI Suggestions" panel below the grid
         ai_suggestions_panel_ = new QWidget();
-        ai_suggestions_panel_->setVisible(false);
+        ai_suggestions_panel_->setVisible(true);
         auto* ai_sugg_layout = new QHBoxLayout(ai_suggestions_panel_);
         ai_sugg_layout->setContentsMargins(0, 0, 0, 0);
         auto* ai_sugg_label = new QLabel("AI Suggestions:");
@@ -859,6 +864,13 @@ void AiFileTinderDialog::initialize() {
                 on_folder_clicked_from_ai(folder_path);
             }
         });
+        // Show auto-mode hint when not in semi mode
+        if (sort_mode_ == AiSortMode::Auto) {
+            auto* hint_item = new QListWidgetItem("Switch to Semi-Auto to use AI Suggestions");
+            hint_item->setForeground(QColor("#7f8c8d"));
+            hint_item->setFlags(hint_item->flags() & ~Qt::ItemIsSelectable);
+            ai_suggestions_list_->addItem(hint_item);
+        }
         ai_sugg_layout->addWidget(ai_suggestions_list_, 1);
 
         // "Other" button to pick any folder from the grid
@@ -1877,9 +1889,13 @@ void AiFileTinderDialog::clear_folder_highlights() {
     }
     if (ai_suggestions_list_) {
         ai_suggestions_list_->clear();
-    }
-    if (ai_suggestions_panel_) {
-        ai_suggestions_panel_->setVisible(false);
+        // Keep panel visible with a hint when in auto mode
+        if (sort_mode_ == AiSortMode::Auto) {
+            auto* hint_item = new QListWidgetItem("Switch to Semi-Auto to use AI Suggestions");
+            hint_item->setForeground(QColor("#7f8c8d"));
+            hint_item->setFlags(hint_item->flags() & ~Qt::ItemIsSelectable);
+            ai_suggestions_list_->addItem(hint_item);
+        }
     }
     if (ai_reasoning_label_) {
         ai_reasoning_label_->setVisible(false);
