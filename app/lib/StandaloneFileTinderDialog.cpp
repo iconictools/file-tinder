@@ -638,25 +638,29 @@ void StandaloneFileTinderDialog::scan_files() {
     std::function<void(const QDir&, int)> scan_dir = [&](const QDir& current_dir, int depth) {
         QStringList dir_entries = current_dir.entryList(filters);
         for (const QString& entry : dir_entries) {
-            QString full_path = current_dir.absoluteFilePath(entry);
-            QFileInfo info(full_path);
-            QMimeType mime_type = mime_db.mimeTypeForFile(full_path);
+            try {
+                QString full_path = current_dir.absoluteFilePath(entry);
+                QFileInfo info(full_path);
+                QMimeType mime_type = mime_db.mimeTypeForFile(full_path);
 
-            FileToProcess file;
-            file.path = full_path;
-            file.name = info.fileName();
-            file.extension = info.suffix().toLower();
-            file.size = info.isDir() ? 0 : info.size();
-            file.modified_datetime = info.lastModified();
-            file.modified_date = file.modified_datetime.toString("MMM d, yyyy HH:mm");
-            file.decision = "pending";
-            file.mime_type = mime_type.name();
-            file.is_directory = info.isDir();
-            files_.push_back(file);
+                FileToProcess file;
+                file.path = full_path;
+                file.name = info.fileName();
+                file.extension = info.suffix().toLower();
+                file.size = info.isDir() ? 0 : info.size();
+                file.modified_datetime = info.lastModified();
+                file.modified_date = file.modified_datetime.toString("MMM d, yyyy HH:mm");
+                file.decision = "pending";
+                file.mime_type = mime_type.name();
+                file.is_directory = info.isDir();
+                files_.push_back(file);
 
-            // Recurse into subdirectories if within depth limit
-            if (info.isDir() && depth < max_depth) {
-                scan_dir(QDir(full_path), depth + 1);
+                // Recurse into subdirectories if within depth limit
+                if (info.isDir() && depth < max_depth) {
+                    scan_dir(QDir(full_path), depth + 1);
+                }
+            } catch (const std::exception& ex) {
+                LOG_ERROR("BasicMode", QString("Error scanning file %1: %2").arg(entry, ex.what()));
             }
         }
     };

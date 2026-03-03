@@ -332,9 +332,10 @@ void MindMapView::place_folder_node(FolderNode* node) {
     // Apply display mode sizing: ensure uniform row height in both modes
     int left_margin = 0;
     if (show_hierarchy_ && !source_path.isEmpty()) {
-        // Calculate depth relative to source path
+        // Calculate depth relative to source path by counting path segments
         QString rel = QDir(source_path).relativeFilePath(node->path);
-        int depth = rel.count('/');
+        int depth = rel.split('/', Qt::SkipEmptyParts).size() - 1;
+        if (depth < 0) depth = 0;
         left_margin = depth * 20;
     }
     if (compact_mode_) {

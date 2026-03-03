@@ -905,7 +905,8 @@ void AdvancedFileTinderDialog::update_quick_access_display() {
         QString prefix = QString("%1: ").arg(i == 9 ? 0 : i + 1);
         // Use font metrics to elide text to fit within max width
         QFontMetrics fm(quick_access_list_->font());
-        int available_width = kMaxItemWidth - fm.horizontalAdvance(prefix) - 16;
+        const int kItemPadding = 16;  // Left + right padding within item widget
+        int available_width = kMaxItemWidth - fm.horizontalAdvance(prefix) - kItemPadding;
         QString elided = fm.elidedText(folder_name, Qt::ElideRight, available_width);
         QString label = prefix + elided;
         auto* item = new QListWidgetItem(label);
