@@ -75,7 +75,6 @@ StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_fol
     , sort_order_btn_(nullptr)
     , folders_checkbox_(nullptr)
     , shortcuts_label_(nullptr)
-    , back_btn_(nullptr)
     , delete_btn_(nullptr)
     , sort_later_btn_(nullptr)
     , keep_btn_(nullptr)
@@ -568,57 +567,12 @@ void StandaloneFileTinderDialog::setup_ui() {
         "QPushButton:hover { background-color: #3d566e; }"
     );
     file_list_btn->setToolTip("Open file list window (multi-select, drag to folders)");
-    connect(file_list_btn, &QPushButton::clicked, this, [this]() {
-        auto* flw = new FileListWindow(files_, filtered_indices_, current_filtered_index_, this);
-        file_list_window_ = flw;
-        connect(flw, &FileListWindow::file_selected, this, [this](int filtered_idx) {
-            if (filtered_idx >= 0 && filtered_idx < static_cast<int>(filtered_indices_.size())) {
-                current_filtered_index_ = filtered_idx;
-                show_current_file();
-            }
-        });
-        connect(flw, &FileListWindow::files_assigned, this, [this, flw](const QList<int>& indices, const QString& dest) {
-            for (int fi : indices) {
-                if (fi >= 0 && fi < static_cast<int>(files_.size())) {
-                    auto& file = files_[fi];
-                    QString old_decision = file.decision;
-                    file.decision = "move";
-                    file.destination_folder = dest;
-                    update_decision_count(old_decision, -1);
-                    move_count_++;
-                    record_action(fi, old_decision, "move", dest);
-                    flw->update_item_status(fi);
-                }
-            }
-            update_progress();
-            update_stats();
-            show_current_file();
-        });
-        connect(flw, &FileListWindow::files_decision_changed, this, [this, flw](const QList<int>& indices, const QString& decision) {
-            for (int fi : indices) {
-                if (fi >= 0 && fi < static_cast<int>(files_.size())) {
-                    auto& file = files_[fi];
-                    QString old_decision = file.decision;
-                    if (old_decision == decision) continue;
-                    update_decision_count(old_decision, -1);
-                    file.decision = decision;
-                    update_decision_count(decision, 1);
-                    record_action(fi, old_decision, decision, file.destination_folder);
-                    flw->update_item_status(fi);
-                }
-            }
-            update_progress();
-            update_stats();
-            show_current_file();
-        });
-        flw->set_destination_folders(get_destination_folders());
-        flw->show();
-    });
+    connect(file_list_btn, &QPushButton::clicked, this, &StandaloneFileTinderDialog::open_file_list_window);
     bottom_layout->addWidget(file_list_btn);
     
     bottom_layout->addSpacing(10);
     
-    finish_btn_ = new QPushButton("Finish Review");
+    finish_btn_ = new QPushButton("Review & Execute");
     finish_btn_->setFixedHeight(ui::scaling::scaled(36));
     finish_btn_->setStyleSheet(
         "QPushButton { font-size: 12px; padding: 8px 15px; "
@@ -984,6 +938,53 @@ int StandaloneFileTinderDialog::get_current_file_index() const {
         return -1;
     }
     return filtered_indices_[current_filtered_index_];
+}
+
+void StandaloneFileTinderDialog::open_file_list_window() {
+    auto* flw = new FileListWindow(files_, filtered_indices_, current_filtered_index_, this);
+    file_list_window_ = flw;
+    connect(flw, &FileListWindow::file_selected, this, [this](int filtered_idx) {
+        if (filtered_idx >= 0 && filtered_idx < static_cast<int>(filtered_indices_.size())) {
+            current_filtered_index_ = filtered_idx;
+            show_current_file();
+        }
+    });
+    connect(flw, &FileListWindow::files_assigned, this, [this, flw](const QList<int>& indices, const QString& dest) {
+        for (int fi : indices) {
+            if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                auto& file = files_[fi];
+                QString old_decision = file.decision;
+                file.decision = "move";
+                file.destination_folder = dest;
+                update_decision_count(old_decision, -1);
+                move_count_++;
+                record_action(fi, old_decision, "move", dest);
+                flw->update_item_status(fi);
+            }
+        }
+        update_progress();
+        update_stats();
+        show_current_file();
+    });
+    connect(flw, &FileListWindow::files_decision_changed, this, [this, flw](const QList<int>& indices, const QString& decision) {
+        for (int fi : indices) {
+            if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                auto& file = files_[fi];
+                QString old_decision = file.decision;
+                if (old_decision == decision) continue;
+                update_decision_count(old_decision, -1);
+                file.decision = decision;
+                update_decision_count(decision, 1);
+                record_action(fi, old_decision, decision, file.destination_folder);
+                flw->update_item_status(fi);
+            }
+        }
+        update_progress();
+        update_stats();
+        show_current_file();
+    });
+    flw->set_destination_folders(get_destination_folders());
+    flw->show();
 }
 
 void StandaloneFileTinderDialog::record_action(int file_index, const QString& old_decision, 
@@ -2072,13 +2073,13 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
     auto* btn_layout = new QHBoxLayout();
     btn_layout->addStretch();
     
-    auto* close_btn = new QPushButton("Consolidate");
+    auto* close_btn = new QPushButton("Done");
     close_btn->setStyleSheet(
         "QPushButton { background-color: #27ae60; color: white; font-weight: bold; "
         "padding: 10px 25px; border-radius: 6px; }"
         "QPushButton:hover { background-color: #2ecc71; }"
     );
-    close_btn->setToolTip("Finalize all changes — undone operations will be permanent after this");
+    close_btn->setToolTip("Close results — undone operations become permanent");
     connect(close_btn, &QPushButton::clicked, &results_dialog, &QDialog::accept);
     btn_layout->addWidget(close_btn);
     
@@ -2125,36 +2126,7 @@ void StandaloneFileTinderDialog::keyPressEvent(QKeyEvent* event) {
                 // Ctrl+F focuses search box
                 if (search_box_) { search_box_->setFocus(); search_box_->selectAll(); }
             } else {
-                // F opens File List window (same as clicking "File List" button)
-                {
-                    auto* flw = new FileListWindow(files_, filtered_indices_, current_filtered_index_, this);
-                    file_list_window_ = flw;
-                    connect(flw, &FileListWindow::file_selected, this, [this](int filtered_idx) {
-                        if (filtered_idx >= 0 && filtered_idx < static_cast<int>(filtered_indices_.size())) {
-                            current_filtered_index_ = filtered_idx;
-                            show_current_file();
-                        }
-                    });
-                    connect(flw, &FileListWindow::files_assigned, this, [this, flw](const QList<int>& indices, const QString& dest) {
-                        for (int fi : indices) {
-                            if (fi >= 0 && fi < static_cast<int>(files_.size())) {
-                                auto& file = files_[fi];
-                                QString old_decision = file.decision;
-                                file.decision = "move";
-                                file.destination_folder = dest;
-                                update_decision_count(old_decision, -1);
-                                move_count_++;
-                                record_action(fi, old_decision, "move", dest);
-                                flw->update_item_status(fi);
-                            }
-                        }
-                        update_progress();
-                        update_stats();
-                        show_current_file();
-                    });
-                    flw->set_destination_folders(get_destination_folders());
-                    flw->show();
-                }
+                open_file_list_window();
             }
             break;
         case Qt::Key_Return:

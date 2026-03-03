@@ -66,6 +66,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Execution log filter mapping: correctly maps "Moved"→"move", "Deleted"→"delete", "Kept"→"keep"
 - "Session in progress" label hides correctly on Clear Session
 - DB migration: `ALTER TABLE` with proper duplicate-column error handling
+- **File List window opened via F key** was missing `files_decision_changed` connection (Keep/Delete/Sort Later context menu didn't work); extracted into shared `open_file_list_window()` helper
+
+### Changed (naming/consistency refinements)
+- **"Finish Review" / "Finish & Execute" → "Review & Execute"** — unified across Basic and Advanced modes
+- **"Cancel" → "Back"** in Advanced/AI mode bottom bar (clearer in single-window context)
+- **"Consolidate" → "Done"** in execution results dialog (less confusing)
+- **Launcher mode descriptions** updated: "Simple sorting" → "Keep / Delete / Sort Later", "Folder tree view" → "Folder grid + assignment", "AI-assisted sorting" → "Auto-sort with AI suggestions"
+- **Launcher hotkey hint** expanded with Y=Redo, P=Preview, ?=Help, Enter=Review
 
 ### Removed
 - `on_back()` and `show_folder_picker()` — unused methods in StandaloneFileTinderDialog
@@ -75,6 +83,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `open_diagnostics()` reference removed from launcher
 - `QDialog::exec()` / `done()` / `reject()` modal pattern — replaced by `QStackedWidget` page switching
 - `QTimer::singleShot` mode-switch hack — no longer needed without recursive `exec()`
+- `back_btn_` — dead member variable, declared but never used
 
 ---
 

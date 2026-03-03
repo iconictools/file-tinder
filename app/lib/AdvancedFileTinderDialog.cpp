@@ -607,8 +607,9 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
     auto* bottom_widget = new QWidget();
     auto* bottom_layout = new QHBoxLayout(bottom_widget);
     
-    auto* cancel_btn = new QPushButton("Cancel");
+    auto* cancel_btn = new QPushButton("Back");
     cancel_btn->setStyleSheet("QPushButton { padding: 8px 16px; }");
+    cancel_btn->setToolTip("Return to the launcher screen");
     connect(cancel_btn, &QPushButton::clicked, this, &AdvancedFileTinderDialog::request_close);
     bottom_layout->addWidget(cancel_btn);
     
@@ -630,7 +631,7 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
     
     bottom_layout->addStretch();
     
-    finish_btn_ = new QPushButton("Finish & Execute");
+    finish_btn_ = new QPushButton("Review & Execute");
     finish_btn_->setStyleSheet(
         "QPushButton { padding: 10px 25px; background-color: #27ae60; "
         "color: white; font-weight: bold; border-radius: 4px; }"

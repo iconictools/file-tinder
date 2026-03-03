@@ -350,7 +350,7 @@ private:
         auto* modes_row = new QHBoxLayout();
         modes_row->setSpacing(12);
         
-        auto* basic_mode_btn = new QPushButton("Basic Mode\n(Simple sorting)");
+        auto* basic_mode_btn = new QPushButton("Basic Mode\n(Keep / Delete / Sort Later)");
         basic_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         basic_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #107c10; color: white; border: none; font-size: 13px; }"
@@ -359,7 +359,7 @@ private:
         connect(basic_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
         modes_row->addWidget(basic_mode_btn);
         
-        auto* adv_mode_btn = new QPushButton("Advanced Mode\n(Folder tree view)");
+        auto* adv_mode_btn = new QPushButton("Advanced Mode\n(Folder grid + assignment)");
         adv_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         adv_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #5c2d91; color: white; border: none; font-size: 13px; }"
@@ -368,7 +368,7 @@ private:
         connect(adv_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
         modes_row->addWidget(adv_mode_btn);
         
-        auto* ai_mode_btn = new QPushButton("AI Mode\n(AI-assisted sorting)");
+        auto* ai_mode_btn = new QPushButton("AI Mode\n(Auto-sort with AI suggestions)");
         ai_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         ai_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #2980b9; color: white; border: none; font-size: 13px; }"
@@ -429,7 +429,10 @@ private:
         root_layout->addLayout(tools_row);
         
         // Hotkey hint
-        auto* hint_text = new QLabel("Keys: Left=Delete | Down=Sort Later | Z=Undo | F=File List | Basic: Right=Keep | Advanced/AI: K=Keep, 1-0=Quick Access, Tab=Grid Nav");
+        auto* hint_text = new QLabel(
+            "Keys: Left=Delete | Down=Sort Later | Z=Undo | Y=Redo | F=File List | P=Preview | ?=Help | Enter=Review\n"
+            "Basic: Right=Keep | Advanced/AI: K=Keep, 1-0=Quick Access, Tab=Grid Nav"
+        );
         hint_text->setStyleSheet("color: #666666; font-size: 10px; padding-top: 8px;");
         hint_text->setAlignment(Qt::AlignCenter);
         hint_text->setWordWrap(true);

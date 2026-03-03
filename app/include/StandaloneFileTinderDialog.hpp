@@ -148,7 +148,6 @@ protected:
     QLabel* size_badge_label_;
     QLineEdit* search_box_;
     
-    QPushButton* back_btn_;
     QPushButton* delete_btn_;
     QPushButton* sort_later_btn_;
     QPushButton* keep_btn_;
@@ -223,6 +222,9 @@ protected:
     // Helper to update decision counts (deduplication)
     void update_decision_count(const QString& old_decision, int delta);
     int get_current_file_index() const;  // Get actual file index from filtered index
+    
+    // File list window helper — single creation point for button & F key
+    void open_file_list_window();
     
     // Review screen
     void show_review_summary();
