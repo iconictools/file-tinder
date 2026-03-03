@@ -95,7 +95,6 @@ private:
     QSpinBox* depth_spin_;
     QTextEdit* purpose_edit_;
     QLabel* cost_label_;
-    QSpinBox* confidence_spin_;
     QNetworkAccessManager* fetch_nam_;
 };
 
@@ -141,6 +140,7 @@ private:
     QWidget* ai_suggestions_panel_ = nullptr;
     QListWidget* ai_suggestions_list_ = nullptr;
     QLabel* ai_reasoning_label_ = nullptr;
+    QCheckBox* ai_reasoning_toggle_ = nullptr;
     int confidence_threshold_ = 0;
 
     // AI correction tracking — records when user overrides AI suggestion
@@ -180,6 +180,9 @@ private:
 
     // Dynamic batch sizing based on folder count, model type, and file count
     int calculate_batch_size(int folder_count, int total_files) const;
+
+    // Whether reasoning display is enabled via toggle
+    bool is_reasoning_visible() const;
 
     // Rate limiting
     bool check_rate_limit();

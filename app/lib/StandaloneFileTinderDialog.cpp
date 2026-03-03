@@ -1343,7 +1343,12 @@ void StandaloneFileTinderDialog::show_review_summary() {
     auto* table = new QTableWidget();
     table->setColumnCount(5);
     table->setHorizontalHeaderLabels({"File", "Size", "Decision", "Destination", "Mode"});
-    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    table->setColumnWidth(4, 60);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     
     // Filter/sort bar for review table
@@ -1451,7 +1456,31 @@ void StandaloneFileTinderDialog::show_review_summary() {
             }
         }
         dest_combo->setToolTip("Type a folder path or select from dropdown. Relative paths are under the source folder.");
-        table->setCellWidget(visible_row, 3, dest_combo);
+
+        // Wrap destination combo with a folder picker button
+        auto* dest_widget = new QWidget();
+        auto* dest_layout = new QHBoxLayout(dest_widget);
+        dest_layout->setContentsMargins(0, 0, 0, 0);
+        dest_layout->setSpacing(2);
+        dest_layout->addWidget(dest_combo, 1);
+        auto* folder_pick_btn = new QPushButton(QStringLiteral("\xF0\x9F\x93\x82")); // 📂 folder icon
+        folder_pick_btn->setMaximumWidth(28);
+        folder_pick_btn->setToolTip("Browse for a folder");
+        auto* decision_combo = combo;  // capture for lambda
+        connect(folder_pick_btn, &QPushButton::clicked, this, [this, dest_combo, decision_combo]() {
+            QString dir = QFileDialog::getExistingDirectory(this, "Select Destination Folder", source_folder_);
+            if (!dir.isEmpty()) {
+                int idx = dest_combo->findData(dir);
+                if (idx < 0) {
+                    dest_combo->addItem(QFileInfo(dir).fileName(), dir);
+                    idx = dest_combo->count() - 1;
+                }
+                dest_combo->setCurrentIndex(idx);
+                decision_combo->setCurrentText("move");
+            }
+        });
+        dest_layout->addWidget(folder_pick_btn);
+        table->setCellWidget(visible_row, 3, dest_widget);
         
         // Mode column: moves with destinations from Advanced/AI modes; others from current mode
         QString mode_for_row = mode_name;
@@ -1466,8 +1495,6 @@ void StandaloneFileTinderDialog::show_review_summary() {
         visible_row++;
     }
     
-    table->resizeColumnsToContents();
-    table->setColumnWidth(0, qMax(table->columnWidth(0), 200));
     layout->addWidget(table, 1);
 
     // Connect preview-on-hover toggle
@@ -1571,8 +1598,12 @@ void StandaloneFileTinderDialog::show_review_summary() {
             auto& file = files_[file_idx];
             QString new_decision = combo->currentText();
             
-            // Read destination from dest combo
-            auto* dest_combo = qobject_cast<QComboBox*>(table->cellWidget(r, 3));
+            // Read destination from dest combo (inside wrapper widget)
+            QComboBox* dest_combo = nullptr;
+            auto* dest_widget = table->cellWidget(r, 3);
+            if (dest_widget) {
+                dest_combo = dest_widget->findChild<QComboBox*>();
+            }
             QString new_dest;
             if (dest_combo) {
                 new_dest = dest_combo->currentData().toString();

@@ -343,18 +343,6 @@ void AiSetupDialog::build_ui() {
 
     main_layout->addWidget(purpose_group);
 
-    // ── Confidence threshold (optional) ──
-    auto* conf_row = new QHBoxLayout();
-    conf_row->addWidget(new QLabel("Min. confidence threshold:"));
-    confidence_spin_ = new QSpinBox();
-    confidence_spin_->setRange(0, 90);
-    confidence_spin_->setValue(0);
-    confidence_spin_->setSuffix("%");
-    confidence_spin_->setToolTip("Set to 0 to show all suggestions. Higher values filter out low-confidence results.");
-    conf_row->addWidget(confidence_spin_);
-    conf_row->addStretch();
-    main_layout->addLayout(conf_row);
-
     auto* budget_row = new QHBoxLayout();
     budget_row->addWidget(new QLabel("Max budget:"));
     auto* budget_spin = new QDoubleSpinBox();
@@ -642,7 +630,7 @@ AiProviderConfig AiSetupDialog::provider_config() const {
 }
 
 int AiSetupDialog::confidence_threshold() const {
-    return confidence_spin_->value();
+    return 0;
 }
 
 // ============================================================
@@ -709,8 +697,8 @@ void AiFileTinderDialog::initialize() {
             }
         });
 
-        // "Re-run AI" button
-        rerun_ai_btn_ = new QPushButton("Re-run AI");
+        // "AI Actions" button
+        rerun_ai_btn_ = new QPushButton("AI Actions");
         rerun_ai_btn_->setStyleSheet(
             "QPushButton { padding: 5px 12px; background-color: #3498db; "
             "border-radius: 4px; color: white; font-size: 11px; }"
@@ -725,10 +713,10 @@ void AiFileTinderDialog::initialize() {
                 return;
             }
             QMenu menu;
-            auto* remaining_action = menu.addAction("Remaining unsorted files only");
-            auto* all_action = menu.addAction("All files (overwrite existing decisions)");
+            auto* remaining_action = menu.addAction("Analyze remaining files");
+            auto* all_action = menu.addAction("Re-analyze all files");
             menu.addSeparator();
-            auto* recat_action = menu.addAction("Re-categorize (re-sort based on changed folders)");
+            auto* recat_action = menu.addAction("Generate new categories");
             recat_action->setToolTip("Re-analyze already-sorted files that might better fit new/changed categories");
 
             auto* chosen = menu.exec(rerun_ai_btn_->mapToGlobal(QPoint(0, rerun_ai_btn_->height())));
@@ -795,6 +783,28 @@ void AiFileTinderDialog::initialize() {
                         }
                     });
                     title_layout->insertWidget(title_layout->count() - 1, ai_glow_toggle_);
+
+                    ai_reasoning_toggle_ = new QCheckBox("AI Reasoning");
+                    ai_reasoning_toggle_->setChecked(true);
+                    ai_reasoning_toggle_->setToolTip("Show AI reasoning text for each file");
+                    ai_reasoning_toggle_->setStyleSheet("QCheckBox { color: #95a5a6; font-size: 10px; }");
+                    connect(ai_reasoning_toggle_, &QCheckBox::toggled, this, [this](bool checked) {
+                        if (ai_reasoning_label_) {
+                            if (!checked) {
+                                ai_reasoning_label_->setVisible(false);
+                            } else {
+                                // Re-show reasoning for current file if available
+                                int file_idx = get_current_file_index();
+                                for (const auto& s : suggestions_) {
+                                    if (s.file_index == file_idx && !s.reasoning.isEmpty()) {
+                                        ai_reasoning_label_->setVisible(true);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    title_layout->insertWidget(title_layout->count() - 1, ai_reasoning_toggle_);
                 }
             }
         }
@@ -1715,7 +1725,7 @@ void AiFileTinderDialog::show_current_file() {
                     highlight_suggested_folders(s.suggested_folders);
                     // Show reasoning
                     if (ai_reasoning_label_) {
-                        if (!s.reasoning.isEmpty()) {
+                        if (!s.reasoning.isEmpty() && is_reasoning_visible()) {
                             ai_reasoning_label_->setText("AI: " + s.reasoning);
                             ai_reasoning_label_->setVisible(true);
                         } else {
@@ -1752,7 +1762,7 @@ void AiFileTinderDialog::show_current_file() {
         for (const auto& s : suggestions_) {
             if (s.file_index == file_idx && !s.reasoning.isEmpty()) {
                 ai_reasoning_label_->setText(QString("AI: %1").arg(s.reasoning));
-                ai_reasoning_label_->setVisible(true);
+                ai_reasoning_label_->setVisible(is_reasoning_visible());
                 found = true;
                 break;
             }
@@ -1761,6 +1771,10 @@ void AiFileTinderDialog::show_current_file() {
             ai_reasoning_label_->setVisible(false);
         }
     }
+}
+
+bool AiFileTinderDialog::is_reasoning_visible() const {
+    return !ai_reasoning_toggle_ || ai_reasoning_toggle_->isChecked();
 }
 
 void AiFileTinderDialog::highlight_suggested_folders(const QStringList& folders) {

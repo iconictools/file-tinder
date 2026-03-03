@@ -150,18 +150,8 @@ void AdvancedFileTinderDialog::setup_ui() {
     // Requirement 2: Detect missing folders (deleted from disk between sessions)
     check_missing_folders();
     
-    // Requirement 1: First-time onboarding prompt
-    if (folder_model_ && folder_model_->root_node() && 
-        folder_model_->root_node()->children.empty()) {
-        QMessageBox::information(this, "Welcome to Advanced Mode",
-            "Welcome to Advanced Mode!\n\n"
-            "• Click the [+ Add Folder] button to add destination folders\n"
-            "• Click any folder to assign the current file to it\n"
-            "• Use keys 1-0 for Quick Access slots\n"
-            "• Right-click folders for more options\n\n"
-            "Tip: You can add folders outside the source directory — "
-            "they'll be shown in purple.");
-    }
+    // Requirement 1: First-time onboarding — help is available via the ? button
+    // (welcome popup removed to avoid blocking the user)
     
     // Initialize display
     if (!files_.empty()) {
