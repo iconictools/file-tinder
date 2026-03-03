@@ -35,13 +35,6 @@ namespace ui::dimensions {
     // Advanced File Tinder
     constexpr int kAdvancedFileTinderMinWidth = 800;
     constexpr int kAdvancedFileTinderMinHeight = 600;
-    constexpr int kFolderTreePanelMinWidth = 350;
-    constexpr int kFolderTreePanelMaxWidth = 600;
-    
-    // Mind Map Node sizes
-    constexpr int kNodeWidth = 250;
-    constexpr int kNodeHeight = 60;
-    constexpr int kNodeBorderRadius = 4;
     
     // Main action buttons
     constexpr int kMainButtonWidth = 200;
@@ -50,11 +43,6 @@ namespace ui::dimensions {
 }
 
 namespace ui::colors {
-    constexpr const char* kNodeDefaultBg = "#ffffff";
-    constexpr const char* kNodeSelectedBg = "#e8f4fc";
-    constexpr const char* kNodeVirtualBg = "#fff8e1";
-    constexpr const char* kNodeConnectedBg = "#e8f4fc";
-    constexpr const char* kNodeBorder = "#cccccc";
     constexpr const char* kDeleteColor = "#e74c3c";
     constexpr const char* kKeepColor = "#2ecc71";
     constexpr const char* kSortLaterColor = "#f39c12";
@@ -62,8 +50,6 @@ namespace ui::colors {
 }
 
 namespace ui::fonts {
-    constexpr int kNodeTitleSize = 14;
-    constexpr int kNodeSubtitleSize = 10;
     constexpr int kHeaderSize = 18;
 }
 

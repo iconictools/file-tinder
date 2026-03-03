@@ -26,6 +26,7 @@ All three modes share the same session state, so you can switch between them fre
   - **Z/Y**: Undo/Redo last action
 - **Image preview**: Opens images in a separate zoomable window (P key)
 - **File type filtering**: Images, Videos, Audio, Documents, Archives, Other, Folders Only, or custom extensions
+- **Subfolder depth control**: Spinner (0–5) to include files from subfolders
 - **Multi-field sorting**: By Name, Size, Type, or Date Modified (ascending/descending)
 - **Progress tracking**: Visual progress bar showing files sorted vs. remaining
 - **Session persistence**: Resume sorting sessions across application restarts
@@ -36,12 +37,15 @@ All three modes share the same session state, so you can switch between them fre
 - **Visual folder grid**: Clickable folder buttons in a scrollable grid layout
 - **One-click file assignment**: Click any folder to move the current file there
 - **Dynamic folder management**: Create new or add existing folders via [+], right-click for rename/color/delete
+- **Manual Edit dialog**: Batch editor for grid folders — tree/text toggle, middle-click delete, add folders/subfolders
 - **Quick Access bar**: Pin up to 10 folders for one-click access (keys 1-0)
-- **Grid customization**: Compact/Expanded toggle, 3-level path display (Off/Relative/Full), adjustable button width, row count control
+- **Grid customization**: Height spinner, auto width, 3-level path display (Off/Relative/Full), adjustable button width, row count control, visual hierarchy toggle
 - **Grid configurations**: Save/load named grid layouts for reuse across sessions
 - **Folder coloring**: 8 preset colors via right-click context menu
 - **Keyboard navigation**: Tab enters grid navigation, arrow keys move between folders, Space to assign
-- **Alphabetical/count sorting**: Sort grid folders A-Z or by assigned file count
+- **Sort dropdown**: Manual / A-Z / By Count ordering for grid folders
+- **Expand grid**: Fullscreen toggle for the folder grid
+- **Node swapping**: Drag folders to reorder within the grid
 
 ### AI Mode
 - **Any OpenAI-compatible API**: Works with OpenAI, Anthropic, Google, Groq, local models (LM Studio, Ollama)
@@ -92,8 +96,10 @@ All three modes share the same session state, so you can switch between them fre
 
 ### Launcher / Main Screen
 - **Mode selection**: Basic, Advanced, or AI mode
+- **Multiple folders**: Toggle to add multiple source folders to a single session
 - **Recent folders**: Quick access to previously used source folders (middle-click to remove)
 - **Dark/Light theme**: Toggle between dark and light color schemes
+- **User Data**: Activity log of all past executions; AI-powered personality analysis and organization tips
 - **Clear session**: Reset all decisions and start fresh
 - **Session resume**: Shows "Session in progress" label when a previous session has sorted files
 
@@ -213,6 +219,7 @@ file-tinder/
 │   │   ├── DuplicateDetectionWindow.hpp  # SHA-256 duplicate finder
 │   │   ├── AppLogger.hpp            # Application logging
 │   │   ├── UserDataDialog.hpp       # User data and activity log
+│   │   ├── ManualEditDialog.hpp     # Grid folder batch editor
 │   │   ├── StandaloneFileTinderDialog.hpp  # Basic mode dialog
 │   │   ├── AdvancedFileTinderDialog.hpp    # Advanced mode dialog
 │   │   └── AiFileTinderDialog.hpp          # AI mode dialog
