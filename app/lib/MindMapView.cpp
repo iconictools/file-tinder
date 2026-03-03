@@ -30,14 +30,48 @@ FolderButton::FolderButton(FolderNode* node, QWidget* parent)
 
 void FolderButton::update_display() {
     QString name;
-    if (show_full_path_) {
-        name = node_->path;
-        QStringList parts = name.split(QDir::separator());
-        if (parts.size() <= 2) parts = name.split('/');  // fallback for stored paths
-        if (parts.size() > 2) {
-            name = parts.mid(parts.size() - 2).join(QDir::separator());
+    if (path_display_mode_ == 2 && !source_path_.isEmpty()) {
+        // Fuller paths: full relative path from source
+        QString p = QDir::toNativeSeparators(node_->path);
+        QString src = QDir::toNativeSeparators(source_path_);
+        if (!src.endsWith(QDir::separator())) src += QDir::separator();
+        if (p == QDir::toNativeSeparators(source_path_)) {
+            name = QFileInfo(source_path_).fileName();
+        } else if (p.startsWith(src)) {
+            name = p.mid(src.length());
+        } else {
+            // Fallback with forward slashes
+            QString pf = node_->path;
+            QString sf = source_path_;
+            if (!sf.endsWith('/')) sf += '/';
+            if (pf.startsWith(sf)) {
+                name = pf.mid(sf.length());
+            } else {
+                name = node_->path;
+            }
         }
-        // For single-component paths, just use the full path as-is
+    } else if (path_display_mode_ == 1 && !source_path_.isEmpty()) {
+        // Full paths: one-level relative (parent/name if deeper than direct child)
+        QString p = node_->path;
+        QString src = source_path_;
+        // Normalize to forward slashes for comparison
+        QString pn = QDir::cleanPath(p);
+        QString sn = QDir::cleanPath(src);
+        if (pn == sn) {
+            name = QFileInfo(src).fileName();
+        } else if (pn.startsWith(sn + '/') || pn.startsWith(sn + QDir::separator())) {
+            QString rel = pn.mid(sn.length() + 1);
+            QStringList parts = rel.split('/');
+            if (parts.size() <= 1) {
+                name = rel;  // Direct child: just basename
+            } else {
+                // Show parent/name
+                name = parts.mid(parts.size() - 2).join(QDir::separator());
+            }
+        } else {
+            // Outside source: show full path
+            name = node_->path;
+        }
     } else {
         name = node_->display_name;
         if (name.isEmpty()) {
@@ -66,7 +100,21 @@ void FolderButton::set_selected(bool selected) {
     update_style();
 }
 
+void FolderButton::set_highlighted(bool on) {
+    is_highlighted_ = on;
+    update_style();
+}
+
 void FolderButton::update_style() {
+    if (is_highlighted_ && !is_selected_) {
+        setStyleSheet(
+            "QPushButton { text-align: center; padding: 2px 6px; "
+            "background-color: #3a3520; border: 2px solid #f1c40f; "
+            "border-radius: 4px; color: #f1c40f; font-weight: bold; font-size: 10px; }"
+            "QPushButton:hover { background-color: #4a4530; }"
+        );
+        return;
+    }
     if (is_selected_) {
         setStyleSheet(
             "QPushButton { text-align: center; padding: 2px 6px; "
@@ -242,7 +290,8 @@ void MindMapView::build_grid() {
     int root_h = compact_mode_ ? ui::scaling::scaled(38) : ui::scaling::scaled(42);
     if (custom_width_ > 0) root_w = ui::scaling::scaled(custom_width_ + 20);
     auto* root_btn = new FolderButton(root, content_widget_);
-    root_btn->set_show_full_path(show_full_paths_);
+    // Root always shows just the source folder basename
+    root_btn->set_path_display_mode(0);
     root_btn->setFixedSize(root_w, root_h);
     root_btn->setStyleSheet(
         QString("QPushButton { text-align: center; padding: 2px 6px; "
@@ -272,7 +321,13 @@ void MindMapView::build_grid() {
 
 void MindMapView::place_folder_node(FolderNode* node) {
     auto* btn = new FolderButton(node, content_widget_);
-    btn->set_show_full_path(show_full_paths_);
+    QString source_path = (model_ && model_->root_node()) ? model_->root_node()->path : QString();
+    btn->set_path_display_mode(path_display_mode_, source_path);
+
+    // Apply AI glow if this path is highlighted
+    if (highlighted_paths_.contains(node->path)) {
+        btn->set_highlighted(true);
+    }
     
     // Apply display mode sizing: ensure uniform row height in both modes
     if (compact_mode_) {
@@ -390,6 +445,20 @@ void MindMapView::sort_by_count() {
     if (!model_ || !model_->root_node()) return;
     model_->sort_children_by_count(model_->root_node());
     refresh_layout();
+}
+
+void MindMapView::set_highlighted_paths(const QStringList& paths) {
+    highlighted_paths_ = paths;
+    for (auto it = buttons_.begin(); it != buttons_.end(); ++it) {
+        it.value()->set_highlighted(paths.contains(it.key()));
+    }
+}
+
+void MindMapView::clear_highlighted_paths() {
+    highlighted_paths_.clear();
+    for (auto it = buttons_.begin(); it != buttons_.end(); ++it) {
+        it.value()->set_highlighted(false);
+    }
 }
 
 void MindMapView::set_keyboard_mode(bool on) {

@@ -23,7 +23,10 @@ public:
     FolderNode* node() const { return node_; }
     void set_selected(bool selected);
     void update_display();
-    void set_show_full_path(bool show) { show_full_path_ = show; update_display(); }
+    void set_path_display_mode(int mode, const QString& source_path = {}) {
+        path_display_mode_ = mode; source_path_ = source_path; update_display();
+    }
+    void set_highlighted(bool on);
     
 signals:
     void folder_clicked(const QString& path);
@@ -39,7 +42,9 @@ private:
     FolderNode* node_;
     bool is_selected_;
     QPoint drag_start_pos_;
-    bool show_full_path_ = false;
+    int path_display_mode_ = 0;  // 0=basename, 1=relative, 2=full relative
+    QString source_path_;
+    bool is_highlighted_ = false;
     
     void update_style();
 };
@@ -84,7 +89,7 @@ private:
     int next_col_;
     int max_rows_per_col_ = 6;  // Configurable items per column before wrapping
     bool compact_mode_ = true;  // Compact (small) vs expanded (wider) folder buttons
-    bool show_full_paths_ = false;
+    int path_display_mode_ = 0;  // 0=off, 1=paths, 2=full paths
     int custom_width_ = 0;  // 0 = use compact/expanded defaults
     bool row_major_ = false;  // false = column-major (top-to-bottom), true = row-major (left-to-right)
     
@@ -96,14 +101,18 @@ public:
     int max_rows_per_col() const { return max_rows_per_col_; }
     void set_compact_mode(bool compact) { compact_mode_ = compact; }
     bool compact_mode() const { return compact_mode_; }
-    void set_show_full_paths(bool show) { show_full_paths_ = show; }
-    bool show_full_paths() const { return show_full_paths_; }
+    void set_path_display_mode(int mode) { path_display_mode_ = mode; }
+    int path_display_mode() const { return path_display_mode_; }
     void set_custom_width(int w) { custom_width_ = w; }
     int custom_width() const { return custom_width_; }
     void set_row_major(bool rm) { row_major_ = rm; }
     bool row_major() const { return row_major_; }
     void sort_alphabetically();
     void sort_by_count();
+
+    // AI glow highlighting
+    void set_highlighted_paths(const QStringList& paths);
+    void clear_highlighted_paths();
 
     // Keyboard navigation
     void set_keyboard_mode(bool on);
@@ -120,6 +129,7 @@ private:
     int focused_index_ = -1;       // Index into ordered_paths_
     QStringList ordered_paths_;     // Paths in grid order (row-major by column)
     QLabel* empty_label_ = nullptr; // Empty state message
+    QStringList highlighted_paths_;  // AI glow highlight paths
     void update_focus_visual();
     void build_ordered_paths();
     void clamp_focused_index();

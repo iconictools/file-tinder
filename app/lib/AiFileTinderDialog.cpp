@@ -779,6 +779,22 @@ void AiFileTinderDialog::initialize() {
                 if (title_layout) {
                     title_layout->insertWidget(title_layout->count() - 1, ai_setup_btn_);
                     title_layout->insertWidget(title_layout->count() - 1, rerun_ai_btn_);
+
+                    ai_glow_toggle_ = new QCheckBox("Glow AI");
+                    ai_glow_toggle_->setChecked(true);
+                    ai_glow_toggle_->setToolTip("Highlight AI-suggested folders with a gold glow border in the grid");
+                    ai_glow_toggle_->setStyleSheet("QCheckBox { color: #f1c40f; font-size: 10px; }");
+                    connect(ai_glow_toggle_, &QCheckBox::toggled, this, [this](bool checked) {
+                        if (!checked) {
+                            if (mind_map_view_) mind_map_view_->clear_highlighted_paths();
+                        } else {
+                            // Re-apply highlights for current file
+                            if (!highlighted_folders_.isEmpty() && mind_map_view_) {
+                                mind_map_view_->set_highlighted_paths(highlighted_folders_);
+                            }
+                        }
+                    });
+                    title_layout->insertWidget(title_layout->count() - 1, ai_glow_toggle_);
                 }
             }
         }
@@ -1755,6 +1771,11 @@ void AiFileTinderDialog::highlight_suggested_folders(const QStringList& folders)
         mind_map_view_->set_selected_folder(folders.first());
     }
 
+    // Apply glow borders on grid nodes if toggle is on
+    if (mind_map_view_ && (!ai_glow_toggle_ || ai_glow_toggle_->isChecked())) {
+        mind_map_view_->set_highlighted_paths(folders);
+    }
+
     // Populate the AI Suggestions panel (separate from Quick Access)
     if (ai_suggestions_list_) {
         ai_suggestions_list_->clear();
@@ -1776,6 +1797,9 @@ void AiFileTinderDialog::highlight_suggested_folders(const QStringList& folders)
 
 void AiFileTinderDialog::clear_folder_highlights() {
     highlighted_folders_.clear();
+    if (mind_map_view_) {
+        mind_map_view_->clear_highlighted_paths();
+    }
     if (ai_suggestions_list_) {
         ai_suggestions_list_->clear();
     }

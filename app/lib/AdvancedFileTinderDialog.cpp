@@ -230,15 +230,19 @@ void AdvancedFileTinderDialog::setup_mind_map() {
     });
     grid_toolbar->addWidget(compact_btn);
     
-    auto* fullpath_btn = new QPushButton("Full Paths");
+    auto* fullpath_btn = new QPushButton("Off");
     fullpath_btn->setMaximumWidth(75);
-    fullpath_btn->setCheckable(true);
-    fullpath_btn->setChecked(false);
     fullpath_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
-    fullpath_btn->setToolTip("Show full folder path structure in button names");
-    connect(fullpath_btn, &QPushButton::toggled, this, [this](bool checked) {
+    fullpath_btn->setToolTip("Cycle path display: Off → Paths → Full Paths");
+    fullpath_btn->setProperty("path_mode", 0);
+    connect(fullpath_btn, &QPushButton::clicked, this, [this, fullpath_btn]() {
+        int mode = fullpath_btn->property("path_mode").toInt();
+        mode = (mode + 1) % 3;
+        fullpath_btn->setProperty("path_mode", mode);
+        static const char* labels[] = {"Off", "Paths", "Full Paths"};
+        fullpath_btn->setText(labels[mode]);
         if (mind_map_view_) {
-            mind_map_view_->set_show_full_paths(checked);
+            mind_map_view_->set_path_display_mode(mode);
             mind_map_view_->refresh_layout();
         }
     });
@@ -1336,7 +1340,7 @@ void AdvancedFileTinderDialog::save_grid_config() {
     bool compact = mind_map_view_ ? mind_map_view_->compact_mode() : true;
     int rows = mind_map_view_ ? mind_map_view_->max_rows_per_col() : 6;
     int custom_w = mind_map_view_ ? mind_map_view_->custom_width() : 0;
-    bool full_paths = mind_map_view_ ? mind_map_view_->show_full_paths() : false;
+    bool full_paths = mind_map_view_ ? (mind_map_view_->path_display_mode() > 0) : false;
     paths.append(QString("__meta__compact=%1").arg(compact ? 1 : 0));
     paths.append(QString("__meta__rows=%1").arg(rows));
     paths.append(QString("__meta__width=%1").arg(custom_w));
@@ -1401,7 +1405,7 @@ void AdvancedFileTinderDialog::load_grid_config() {
         mind_map_view_->set_compact_mode(meta_compact);
         mind_map_view_->set_max_rows_per_col(meta_rows);
         mind_map_view_->set_custom_width(meta_width);
-        mind_map_view_->set_show_full_paths(meta_fullpaths);
+        mind_map_view_->set_path_display_mode(meta_fullpaths ? 1 : 0);
     }
     if (mind_map_view_) mind_map_view_->refresh_layout();
 }

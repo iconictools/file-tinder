@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QMap>
 #include <QTextBrowser>
+#include <QCheckBox>
 
 class MindMapView;
 class FolderTreeModel;
@@ -126,6 +127,7 @@ private:
     QStringList highlighted_folders_;
     QPushButton* ai_setup_btn_ = nullptr;
     QPushButton* rerun_ai_btn_ = nullptr;
+    QCheckBox* ai_glow_toggle_ = nullptr;
 
     // Network
     QNetworkAccessManager* network_manager_;
