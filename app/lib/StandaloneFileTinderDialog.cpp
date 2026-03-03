@@ -1327,7 +1327,11 @@ void StandaloneFileTinderDialog::go_to_previous() {
 void StandaloneFileTinderDialog::show_review_summary() {
     QDialog summary_dialog(this);
     summary_dialog.setWindowTitle("Review Summary");
-    summary_dialog.setMinimumSize(ui::scaling::scaled(800), ui::scaling::scaled(550));
+    auto* scr = QApplication::primaryScreen();
+    QRect screenRect = scr ? scr->availableGeometry() : QRect(0, 0, 1024, 768);
+    summary_dialog.setMinimumSize(
+        qMin(ui::scaling::scaled(800), screenRect.width() * 85 / 100),
+        qMin(ui::scaling::scaled(550), screenRect.height() * 80 / 100));
     
     auto* layout = new QVBoxLayout(&summary_dialog);
     
@@ -1794,7 +1798,11 @@ void StandaloneFileTinderDialog::execute_decisions() {
 void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& result, qint64 elapsed_ms) {
     QDialog results_dialog(this);
     results_dialog.setWindowTitle("Execution Complete");
-    results_dialog.setMinimumSize(ui::scaling::scaled(700), ui::scaling::scaled(500));
+    auto* scr2 = QApplication::primaryScreen();
+    QRect scrRect2 = scr2 ? scr2->availableGeometry() : QRect(0, 0, 1024, 768);
+    results_dialog.setMinimumSize(
+        qMin(ui::scaling::scaled(700), scrRect2.width() * 85 / 100),
+        qMin(ui::scaling::scaled(500), scrRect2.height() * 80 / 100));
     
     auto* layout = new QVBoxLayout(&results_dialog);
     

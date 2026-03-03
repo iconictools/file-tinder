@@ -18,6 +18,8 @@
 #include <QHeaderView>
 #include <QFileInfo>
 #include <QMouseEvent>
+#include <QResizeEvent>
+#include <QScreen>
 #include <QTimer>
 #include <QMimeDatabase>
 #include <QProgressDialog>
@@ -123,17 +125,17 @@ private:
         QRect avail = screen->availableGeometry();
         int w, h;
         if (mode == "basic") {
-            w = qMin(ui::scaling::scaled(ui::dimensions::kStandaloneFileTinderMinWidth),
-                      avail.width() * 85 / 100);
-            h = qMin(ui::scaling::scaled(ui::dimensions::kStandaloneFileTinderMinHeight),
-                      avail.height() * 75 / 100);
+            // Basic mode: 70% width, 70% height (min 600x380)
+            w = qMax(600, avail.width() * 70 / 100);
+            h = qMax(380, avail.height() * 70 / 100);
         } else {
-            // Advanced and AI modes need more space
-            w = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinWidth),
-                      avail.width() * 9 / 10);
-            h = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinHeight),
-                      avail.height() * 8 / 10);
+            // Advanced and AI modes: 85% width, 80% height (min 780x550)
+            w = qMax(780, avail.width() * 85 / 100);
+            h = qMax(550, avail.height() * 80 / 100);
         }
+        // Never exceed screen
+        w = qMin(w, avail.width());
+        h = qMin(h, avail.height());
         resize(w, h);
         ensure_on_screen();
     }
@@ -162,6 +164,21 @@ private:
             geo.moveBottom(avail.bottom());
         
         setGeometry(geo);
+    }
+    
+    // Prevent the window from ever growing beyond the screen
+    void resizeEvent(QResizeEvent* event) override {
+        QWidget::resizeEvent(event);
+        auto* screen = QApplication::primaryScreen();
+        if (!screen) return;
+        QRect avail = screen->availableGeometry();
+        bool clamped = false;
+        int w = width(), h = height();
+        if (w > avail.width())  { w = avail.width(); clamped = true; }
+        if (h > avail.height()) { h = avail.height(); clamped = true; }
+        if (clamped) resize(w, h);
+        // Keep title bar accessible
+        if (y() < avail.top()) move(x(), avail.top());
     }
     
     void apply_theme() {
@@ -820,6 +837,15 @@ private:
     }
     
     void launch_basic() {
+        // Fast path: widget already exists and folder hasn't changed
+        if (basic_widget_ && basic_widget_->source_folder() == chosen_path_) {
+            if (stack_->currentWidget() == launcher_page_)
+                launcher_size_ = size();
+            stack_->setCurrentWidget(basic_widget_);
+            resize_for_mode("basic");
+            return;
+        }
+        
         if (!validate_folder()) return;
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;
@@ -862,6 +888,15 @@ private:
     }
     
     void launch_advanced() {
+        // Fast path: widget already exists and folder hasn't changed
+        if (advanced_widget_ && advanced_widget_->source_folder() == chosen_path_) {
+            if (stack_->currentWidget() == launcher_page_)
+                launcher_size_ = size();
+            stack_->setCurrentWidget(advanced_widget_);
+            resize_for_mode("advanced");
+            return;
+        }
+        
         if (!validate_folder()) return;
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;
@@ -903,6 +938,15 @@ private:
     }
     
     void launch_ai() {
+        // Fast path: widget already exists and folder hasn't changed
+        if (ai_widget_ && ai_widget_->source_folder() == chosen_path_) {
+            if (stack_->currentWidget() == launcher_page_)
+                launcher_size_ = size();
+            stack_->setCurrentWidget(ai_widget_);
+            resize_for_mode("ai");
+            return;
+        }
+        
         if (!validate_folder()) return;
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;

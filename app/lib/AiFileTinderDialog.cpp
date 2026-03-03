@@ -58,7 +58,11 @@ AiSetupDialog::AiSetupDialog(const QStringList& existing_folders,
     , file_count_(file_count)
     , fetch_nam_(new QNetworkAccessManager(this)) {
     setWindowTitle("AI Sorting Setup");
-    setMinimumSize(ui::scaling::scaled(480), ui::scaling::scaled(420));
+    auto* scr = QApplication::primaryScreen();
+    QRect scrRect = scr ? scr->availableGeometry() : QRect(0, 0, 1024, 768);
+    setMinimumSize(
+        qMin(ui::scaling::scaled(480), scrRect.width() * 70 / 100),
+        qMin(ui::scaling::scaled(420), scrRect.height() * 70 / 100));
     build_ui();
     load_saved_provider();
 }
@@ -1046,7 +1050,13 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
     // Progress dialog with real-time log
     QDialog progress_dialog(this);
     progress_dialog.setWindowTitle("AI Analysis");
-    progress_dialog.setMinimumSize(ui::scaling::scaled(550), ui::scaling::scaled(400));
+    {
+        auto* scr = QApplication::primaryScreen();
+        QRect sr = scr ? scr->availableGeometry() : QRect(0, 0, 1024, 768);
+        progress_dialog.setMinimumSize(
+            qMin(ui::scaling::scaled(550), sr.width() * 70 / 100),
+            qMin(ui::scaling::scaled(400), sr.height() * 65 / 100));
+    }
     auto* prog_layout = new QVBoxLayout(&progress_dialog);
 
     auto* prog_header = new QLabel(QString("Analyzing %1 files...").arg(total_files));
