@@ -109,7 +109,8 @@ public:
     explicit AiFileTinderDialog(const QString& source_folder,
                                 DatabaseManager& db,
                                 QWidget* parent = nullptr,
-                                const QStringList& additional_sources = {});
+                                const QStringList& additional_sources = {},
+                                FolderTreeModel* shared_folder_model = nullptr);
     ~AiFileTinderDialog() override;
 
     void initialize() override;

@@ -26,6 +26,7 @@ class QPropertyAnimation;
 class QGraphicsOpacityEffect;
 class ImagePreviewWindow;
 class FileListWindow;
+class FilterWidget;
 struct ExecutionResult;
 
 // Action record for undo functionality
@@ -138,11 +139,7 @@ protected:
     QLabel* progress_label_;
     QLabel* stats_label_;
     QProgressBar* progress_bar_;
-    QComboBox* filter_combo_;
-    QComboBox* sort_combo_;        // Sort field selector
-    QPushButton* sort_order_btn_;  // Asc/Desc toggle
-    QCheckBox* folders_checkbox_;  // Include folders toggle
-    QSpinBox* subfolder_depth_spin_ = nullptr;  // Subfolder recursion depth
+    FilterWidget* filter_widget_ = nullptr;  // Unified filter/sort/subfolder component
     QLabel* shortcuts_label_;
     QLabel* file_position_label_;
     QLabel* size_badge_label_;

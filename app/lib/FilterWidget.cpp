@@ -124,7 +124,7 @@ FilterWidget::FilterWidget(QWidget* parent)
 
 void FilterWidget::setup_ui() {
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(0, 2, 0, 2);
     layout->setSpacing(8);
 
     // Filter section
@@ -156,9 +156,32 @@ void FilterWidget::setup_ui() {
     });
     layout->addWidget(clear_filter_btn);
 
-    // Include folders checkbox
+    // Subfolder options — stacked vertically beside filter
+    auto* subfolder_col = new QVBoxLayout();
+    subfolder_col->setContentsMargins(0, 0, 0, 0);
+    subfolder_col->setSpacing(1);
+
     include_folders_check_ = new QCheckBox("Include Folders");
-    layout->addWidget(include_folders_check_);
+    include_folders_check_->setStyleSheet("font-size: 11px;");
+    subfolder_col->addWidget(include_folders_check_);
+
+    auto* depth_row = new QHBoxLayout();
+    depth_row->setContentsMargins(0, 0, 0, 0);
+    depth_row->setSpacing(4);
+    auto* depth_label = new QLabel("Depth:");
+    depth_label->setStyleSheet("font-size: 11px; color: #95a5a6;");
+    depth_row->addWidget(depth_label);
+    subfolder_depth_spin_ = new QSpinBox();
+    subfolder_depth_spin_->setRange(0, 5);
+    subfolder_depth_spin_->setValue(1);
+    subfolder_depth_spin_->setMaximumWidth(45);
+    subfolder_depth_spin_->setToolTip("How many levels of subfolders to include (0 = top-level only)");
+    subfolder_depth_spin_->setEnabled(false);
+    depth_row->addWidget(subfolder_depth_spin_);
+    depth_row->addStretch();
+    subfolder_col->addLayout(depth_row);
+
+    layout->addLayout(subfolder_col);
 
     // Visual separator
     auto* separator = new QFrame();
@@ -181,7 +204,7 @@ void FilterWidget::setup_ui() {
 
     // Sort order button
     sort_order_btn_ = new QPushButton("Asc");
-    sort_order_btn_->setMinimumWidth(ui::scaling::scaled(60));
+    sort_order_btn_->setMinimumWidth(ui::scaling::scaled(50));
     sort_order_btn_->setCheckable(true);
     sort_order_btn_->setToolTip("Toggle Ascending/Descending");
     sort_order_btn_->setStyleSheet("QPushButton { padding: 3px 8px; border: 1px solid #555; border-radius: 3px; }"
@@ -199,6 +222,10 @@ void FilterWidget::setup_ui() {
             this, &FilterWidget::on_sort_order_toggled);
     connect(include_folders_check_, &QCheckBox::toggled,
             this, &FilterWidget::on_include_folders_toggled);
+    connect(include_folders_check_, &QCheckBox::toggled,
+            subfolder_depth_spin_, &QSpinBox::setEnabled);
+    connect(subfolder_depth_spin_, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int depth) { emit subfolder_depth_changed(depth); });
 
     // Active filter highlight
     connect(filter_combo_, &QComboBox::currentTextChanged, this, [this](const QString& text) {
@@ -317,4 +344,12 @@ void FilterWidget::set_include_folders(bool include) {
 
 void FilterWidget::set_custom_extensions(const QStringList& extensions) {
     custom_extensions_ = extensions;
+}
+
+int FilterWidget::get_subfolder_depth() const {
+    return subfolder_depth_spin_->value();
+}
+
+void FilterWidget::set_subfolder_depth(int depth) {
+    subfolder_depth_spin_->setValue(depth);
 }

@@ -17,10 +17,15 @@ public:
     explicit AdvancedFileTinderDialog(const QString& source_folder,
                                        DatabaseManager& db,
                                        QWidget* parent = nullptr,
-                                       const QStringList& additional_sources = {});
+                                       const QStringList& additional_sources = {},
+                                       FolderTreeModel* shared_folder_model = nullptr);
     ~AdvancedFileTinderDialog() override;
     
     void initialize() override;
+    
+    // Expose the folder model so the launcher can share it
+    FolderTreeModel* folder_model() const { return folder_model_; }
+    MindMapView* mind_map_view() const { return mind_map_view_; }
     
 protected:
     // Advanced mode components accessible to derived classes (AI Mode)

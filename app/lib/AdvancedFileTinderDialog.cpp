@@ -37,7 +37,8 @@
 AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
                                                    DatabaseManager& db,
                                                    QWidget* parent,
-                                                   const QStringList& additional_sources)
+                                                   const QStringList& additional_sources,
+                                                   FolderTreeModel* shared_folder_model)
     : StandaloneFileTinderDialog(source_folder, db, parent, additional_sources)
     , scroll_area_(nullptr)
     , main_content_(nullptr)
@@ -50,7 +51,7 @@ AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
     , quick_access_panel_(nullptr)
     , quick_access_list_(nullptr)
     , filter_widget_(nullptr)
-    , folder_model_(nullptr) {
+    , folder_model_(shared_folder_model) {
     
     setWindowTitle(QString("Advanced Mode — %1").arg(QFileInfo(source_folder).fileName()));
     mode_name_ = "Advanced";
@@ -131,9 +132,11 @@ void AdvancedFileTinderDialog::setup_ui() {
     // Action buttons at bottom
     setup_action_buttons();
     
-    // Initialize folder model
-    folder_model_ = new FolderTreeModel(this);
-    folder_model_->set_root_folder(source_folder_);
+    // Initialize folder model (use shared model if provided, else create new)
+    if (!folder_model_) {
+        folder_model_ = new FolderTreeModel(this);
+        folder_model_->set_root_folder(source_folder_);
+    }
     mind_map_view_->set_model(folder_model_);
     
     // Load saved data

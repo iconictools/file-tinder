@@ -14,6 +14,7 @@
 #include <QDialog>
 #include <QListWidget>
 #include <QFrame>
+#include <QSpinBox>
 
 // Forward declare - actual enums are in StandaloneFileTinderDialog.hpp
 enum class FileFilterType;
@@ -45,7 +46,7 @@ private:
     QPushButton* cancel_btn_;
 };
 
-// Main filter widget - shared between Basic and Advanced modes
+// Main filter widget - shared between Basic, Advanced and AI modes
 class FilterWidget : public QWidget {
     Q_OBJECT
 
@@ -57,6 +58,7 @@ public:
     SortField get_sort_field() const;
     SortOrder get_sort_order() const;
     bool get_include_folders() const;
+    int get_subfolder_depth() const;
     QStringList get_custom_extensions() const;
 
     // Setters
@@ -64,12 +66,14 @@ public:
     void set_sort_field(SortField field);
     void set_sort_order(SortOrder order);
     void set_include_folders(bool include);
+    void set_subfolder_depth(int depth);
     void set_custom_extensions(const QStringList& extensions);
 
 signals:
     void filter_changed();
     void sort_changed();
     void include_folders_changed(bool include);
+    void subfolder_depth_changed(int depth);
 
 private slots:
     void on_filter_changed(int index);
@@ -85,6 +89,7 @@ private:
     QComboBox* sort_combo_;
     QPushButton* sort_order_btn_;
     QCheckBox* include_folders_check_;
+    QSpinBox* subfolder_depth_spin_;
     
     FileFilterType current_filter_;
     SortField current_sort_field_;

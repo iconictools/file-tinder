@@ -1,5 +1,6 @@
 #include "StandaloneFileTinderDialog.hpp"
 #include "DatabaseManager.hpp"
+#include "FilterWidget.hpp"
 #include "FileTinderExecutor.hpp"
 #include "AppLogger.hpp"
 #include "ImagePreviewWindow.hpp"
@@ -70,10 +71,6 @@ StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_fol
     , progress_label_(nullptr)
     , stats_label_(nullptr)
     , progress_bar_(nullptr)
-    , filter_combo_(nullptr)
-    , sort_combo_(nullptr)
-    , sort_order_btn_(nullptr)
-    , folders_checkbox_(nullptr)
     , shortcuts_label_(nullptr)
     , delete_btn_(nullptr)
     , sort_later_btn_(nullptr)
@@ -225,69 +222,70 @@ void StandaloneFileTinderDialog::setup_ui() {
     
     main_layout->addWidget(top_bar);
     
-    // Filter/Sort bar
-    auto* filter_bar = new QWidget();
-    auto* filter_layout = new QHBoxLayout(filter_bar);
-    filter_layout->setContentsMargins(0, 3, 0, 3);
-    filter_layout->setSpacing(8);
+    // Unified filter bar (shared FilterWidget component)
+    auto* filter_row = new QHBoxLayout();
+    filter_row->setContentsMargins(0, 0, 0, 0);
+    filter_row->setSpacing(6);
     
-    // Filter
-    filter_layout->addWidget(new QLabel("Filter:"));
-    filter_combo_ = new QComboBox();
-    filter_combo_->addItem("All Files", static_cast<int>(FileFilterType::All));
-    filter_combo_->addItem("Images", static_cast<int>(FileFilterType::Images));
-    filter_combo_->addItem("Videos", static_cast<int>(FileFilterType::Videos));
-    filter_combo_->addItem("Audio", static_cast<int>(FileFilterType::Audio));
-    filter_combo_->addItem("Documents", static_cast<int>(FileFilterType::Documents));
-    filter_combo_->addItem("Archives", static_cast<int>(FileFilterType::Archives));
-    filter_combo_->addItem("Other", static_cast<int>(FileFilterType::Other));
-    filter_combo_->addItem("Folders Only", static_cast<int>(FileFilterType::FoldersOnly));
-    filter_combo_->addItem("Specify...", static_cast<int>(FileFilterType::Custom));
-    filter_combo_->setMinimumWidth(120);
-    filter_combo_->setStyleSheet(
-        "QComboBox { padding: 4px 8px; background-color: #34495e; "
-        "border-radius: 4px; color: white; }"
-        "QComboBox:hover { background-color: #3d566e; }"
-        "QComboBox::drop-down { border: none; }"
-        "QComboBox:focus { border: 2px solid #3498db; }"
+    filter_widget_ = new FilterWidget(this);
+    filter_row->addWidget(filter_widget_, 1);
+    
+    // Preview toggle
+    preview_btn_ = new QPushButton("Preview");
+    preview_btn_->setFixedHeight(ui::scaling::scaled(28));
+    preview_btn_->setCheckable(true);
+    preview_btn_->setChecked(true);
+    preview_btn_->setStyleSheet(
+        "QPushButton { font-size: 11px; padding: 4px 8px; "
+        "background-color: #34495e; border-radius: 4px; color: white; }"
+        "QPushButton:hover { background-color: #3d566e; }"
+        "QPushButton:checked { background-color: #2980b9; border: 2px solid #1abc9c; }"
     );
-    connect(filter_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &StandaloneFileTinderDialog::on_filter_changed);
-    filter_layout->addWidget(filter_combo_);
+    connect(preview_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_show_preview);
+    filter_row->addWidget(preview_btn_);
     
-    // Subfolder options — stacked vertically beside the filter combo
-    auto* subfolder_col = new QVBoxLayout();
-    subfolder_col->setContentsMargins(0, 0, 0, 0);
-    subfolder_col->setSpacing(1);
+    auto* filter_bar_widget = new QWidget();
+    filter_bar_widget->setLayout(filter_row);
+    main_layout->addWidget(filter_bar_widget);
     
-    folders_checkbox_ = new QCheckBox("Include Folders");
-    folders_checkbox_->setStyleSheet("color: #bdc3c7; font-size: 11px;");
-    connect(folders_checkbox_, &QCheckBox::stateChanged, 
-            this, &StandaloneFileTinderDialog::on_folders_toggle_changed);
-    subfolder_col->addWidget(folders_checkbox_);
-    
-    auto* depth_row = new QHBoxLayout();
-    depth_row->setContentsMargins(0, 0, 0, 0);
-    depth_row->setSpacing(4);
-    auto* depth_label = new QLabel("Depth:");
-    depth_label->setStyleSheet("font-size: 11px; color: #95a5a6;");
-    depth_row->addWidget(depth_label);
-    subfolder_depth_spin_ = new QSpinBox();
-    subfolder_depth_spin_->setRange(0, 5);
-    subfolder_depth_spin_->setValue(1);
-    subfolder_depth_spin_->setMaximumWidth(45);
-    subfolder_depth_spin_->setToolTip("How many levels of subfolders to include (0 = top-level only)");
-    subfolder_depth_spin_->setEnabled(false);
-    connect(folders_checkbox_, &QCheckBox::toggled, subfolder_depth_spin_, &QSpinBox::setEnabled);
-    connect(subfolder_depth_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+    // Connect FilterWidget signals to Basic mode handlers
+    connect(filter_widget_, &FilterWidget::filter_changed, this, [this]() {
+        auto filter = filter_widget_->get_filter_type();
+        if (filter == FileFilterType::Custom) {
+            custom_extensions_ = filter_widget_->get_custom_extensions();
+        }
+        apply_filter(filter);
+    });
+    connect(filter_widget_, &FilterWidget::sort_changed, this, [this]() {
+        auto sf = filter_widget_->get_sort_field();
+        sort_field_ = static_cast<FileSortField>(static_cast<int>(sf));
+        auto so = filter_widget_->get_sort_order();
+        sort_order_ = so;
+        apply_sort();
+        rebuild_filtered_indices();
+        if (!filtered_indices_.empty()) show_current_file();
+        update_progress();
+    });
+    connect(filter_widget_, &FilterWidget::include_folders_changed, this, [this](bool checked) {
+        include_folders_ = checked;
+        rebuild_filtered_indices();
+        if (!filtered_indices_.empty()) {
+            show_current_file();
+        } else {
+            if (preview_label_)
+                preview_label_->setText("<div style='text-align: center; font-size: 24px; color: #f39c12;'>"
+                                       "No files match this filter</div>");
+        }
+        update_progress();
+        update_stats();
+    });
+    connect(filter_widget_, &FilterWidget::subfolder_depth_changed, this, [this](int val) {
         if (val == 0) {
             auto reply = QMessageBox::question(this, "Flatten Files",
                 "Depth 0 will flatten all files into one list. Continue?",
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
             if (reply != QMessageBox::Yes) {
-                subfolder_depth_spin_->blockSignals(true);
-                subfolder_depth_spin_->setValue(1);
-                subfolder_depth_spin_->blockSignals(false);
+                filter_widget_->set_subfolder_depth(1);
                 return;
             }
         } else if (val > 2) {
@@ -295,9 +293,7 @@ void StandaloneFileTinderDialog::setup_ui() {
                 "Depth > 2 may include a very large number of files. Continue?",
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
             if (reply != QMessageBox::Yes) {
-                subfolder_depth_spin_->blockSignals(true);
-                subfolder_depth_spin_->setValue(2);
-                subfolder_depth_spin_->blockSignals(false);
+                filter_widget_->set_subfolder_depth(2);
                 return;
             }
         }
@@ -312,64 +308,6 @@ void StandaloneFileTinderDialog::setup_ui() {
         if (!filtered_indices_.empty()) show_current_file();
         update_progress();
     });
-    depth_row->addWidget(subfolder_depth_spin_);
-    depth_row->addStretch();
-    subfolder_col->addLayout(depth_row);
-    
-    filter_layout->addLayout(subfolder_col);
-    
-    // Visual separator
-    auto* sep = new QFrame();
-    sep->setFrameShape(QFrame::VLine);
-    sep->setFrameShadow(QFrame::Sunken);
-    sep->setStyleSheet("color: #555;");
-    filter_layout->addWidget(sep);
-    
-    // Sort
-    filter_layout->addWidget(new QLabel("Sort:"));
-    sort_combo_ = new QComboBox();
-    sort_combo_->addItem("Name", static_cast<int>(FileSortField::Name));
-    sort_combo_->addItem("Size", static_cast<int>(FileSortField::Size));
-    sort_combo_->addItem("Type", static_cast<int>(FileSortField::Type));
-    sort_combo_->addItem("Date Modified", static_cast<int>(FileSortField::DateModified));
-    sort_combo_->setMinimumWidth(100);
-    sort_combo_->setStyleSheet(
-        "QComboBox { padding: 4px 8px; background-color: #34495e; "
-        "border-radius: 4px; color: white; }"
-        "QComboBox:hover { background-color: #3d566e; }"
-        "QComboBox::drop-down { border: none; }"
-    );
-    connect(sort_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &StandaloneFileTinderDialog::on_sort_changed);
-    filter_layout->addWidget(sort_combo_);
-    
-    // Sort order toggle button
-    sort_order_btn_ = new QPushButton("Asc");
-    sort_order_btn_->setFixedSize(ui::scaling::scaled(50), ui::scaling::scaled(28));
-    sort_order_btn_->setStyleSheet(
-        "QPushButton { padding: 4px; background-color: #34495e; "
-        "border-radius: 4px; color: white; font-size: 11px; }"
-        "QPushButton:hover { background-color: #3d566e; }"
-    );
-    connect(sort_order_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_sort_order_toggled);
-    filter_layout->addWidget(sort_order_btn_);
-    
-    // Preview toggle — opens separate preview window
-    preview_btn_ = new QPushButton("Preview");
-    preview_btn_->setFixedHeight(ui::scaling::scaled(28));
-    preview_btn_->setCheckable(true);
-    preview_btn_->setChecked(true);
-    preview_btn_->setStyleSheet(
-        "QPushButton { font-size: 11px; padding: 4px 8px; "
-        "background-color: #34495e; border-radius: 4px; color: white; }"
-        "QPushButton:hover { background-color: #3d566e; }"
-        "QPushButton:checked { background-color: #2980b9; border: 2px solid #1abc9c; }"
-    );
-    connect(preview_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_show_preview);
-    filter_layout->addWidget(preview_btn_);
-    
-    filter_layout->addStretch();
-    main_layout->addWidget(filter_bar);
     
     // File card — preview + info panel
     auto* file_card = new QWidget();
@@ -561,8 +499,8 @@ void StandaloneFileTinderDialog::setup_ui() {
     // Search box (also triggers File List window)
     search_box_ = new QLineEdit();
     search_box_->setPlaceholderText("Search files...");
-    search_box_->setFixedWidth(ui::scaling::scaled(150));
-    search_box_->setFixedHeight(ui::scaling::scaled(36));
+    search_box_->setMinimumWidth(ui::scaling::scaled(120));
+    search_box_->setMaximumWidth(ui::scaling::scaled(200));
     search_box_->setStyleSheet(
         "QLineEdit { padding: 4px 8px; background-color: #34495e; "
         "border-radius: 4px; color: white; border: 1px solid #4a6078; }"
@@ -619,8 +557,8 @@ void StandaloneFileTinderDialog::scan_files() {
     
     // Determine subfolder depth for recursion
     int max_depth = 0;
-    if (include_folders_ && subfolder_depth_spin_) {
-        max_depth = subfolder_depth_spin_->value();
+    if (include_folders_ && filter_widget_) {
+        max_depth = filter_widget_->get_subfolder_depth();
     }
 
     // Recursive lambda to scan at controlled depth
@@ -2304,46 +2242,17 @@ void StandaloneFileTinderDialog::on_switch_mode_clicked() {
     }
 }
 
-// Sorting implementation
-void StandaloneFileTinderDialog::on_sort_changed(int index) {
-    if (!sort_combo_) return;
-    sort_field_ = static_cast<FileSortField>(sort_combo_->itemData(index).toInt());
-    apply_sort();
-    rebuild_filtered_indices();
-    if (!filtered_indices_.empty()) {
-        show_current_file();
-    }
-    update_progress();
+// Sorting implementation — these are legacy handlers, now driven by FilterWidget signals
+void StandaloneFileTinderDialog::on_sort_changed(int /*index*/) {
+    // Now handled by FilterWidget::sort_changed signal connection
 }
 
 void StandaloneFileTinderDialog::on_sort_order_toggled() {
-    if (sort_order_ == SortOrder::Ascending) {
-        sort_order_ = SortOrder::Descending;
-        sort_order_btn_->setText("Desc");
-    } else {
-        sort_order_ = SortOrder::Ascending;
-        sort_order_btn_->setText("Asc");
-    }
-    apply_sort();
-    rebuild_filtered_indices();
-    if (!filtered_indices_.empty()) {
-        show_current_file();
-    }
-    update_progress();
+    // Now handled by FilterWidget::sort_changed signal connection
 }
 
-void StandaloneFileTinderDialog::on_folders_toggle_changed(int state) {
-    include_folders_ = (state == Qt::Checked);
-    rebuild_filtered_indices();
-    if (!filtered_indices_.empty()) {
-        show_current_file();
-    } else {
-        if (preview_label_)
-            preview_label_->setText("<div style='text-align: center; font-size: 24px; color: #f39c12;'>"
-                                   "No files match this filter</div>");
-    }
-    update_progress();
-    update_stats();
+void StandaloneFileTinderDialog::on_folders_toggle_changed(int /*state*/) {
+    // Now handled by FilterWidget::include_folders_changed signal connection
 }
 
 void StandaloneFileTinderDialog::apply_sort() {
@@ -2404,16 +2313,8 @@ void StandaloneFileTinderDialog::show_custom_extension_dialog() {
 }
 
 // Filter implementation
-void StandaloneFileTinderDialog::on_filter_changed(int index) {
-    FileFilterType filter = static_cast<FileFilterType>(filter_combo_->itemData(index).toInt());
-    
-    // Handle custom filter specially
-    if (filter == FileFilterType::Custom) {
-        show_custom_extension_dialog();
-        return;
-    }
-    
-    apply_filter(filter);
+void StandaloneFileTinderDialog::on_filter_changed(int /*index*/) {
+    // Now handled by FilterWidget::filter_changed signal connection
 }
 
 void StandaloneFileTinderDialog::apply_filter(FileFilterType filter) {

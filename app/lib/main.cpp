@@ -22,11 +22,14 @@
 #include <QMimeDatabase>
 #include <QProgressDialog>
 #include <QStackedWidget>
+#include <QStandardPaths>
+#include <QDesktopServices>
 
 #include "DatabaseManager.hpp"
 #include "StandaloneFileTinderDialog.hpp"
 #include "AdvancedFileTinderDialog.hpp"
 #include "AiFileTinderDialog.hpp"
+#include "FolderTreeModel.hpp"
 #include "FileTinderExecutor.hpp"
 #include "AppLogger.hpp"
 #include "ui_constants.hpp"
@@ -111,6 +114,7 @@ private:
     AdvancedFileTinderDialog* advanced_widget_ = nullptr;
     AiFileTinderDialog* ai_widget_ = nullptr;
     QSize launcher_size_;  // Saved launcher page size for restoring on return
+    FolderTreeModel* shared_folder_model_ = nullptr;  // Shared across all modes
     
     // Resize the window appropriately for the given mode, keeping it on screen
     void resize_for_mode(const QString& mode) {
@@ -475,6 +479,22 @@ private:
         });
         tools_row->addWidget(user_data_btn);
         
+        auto* app_data_btn = new QPushButton("App Data");
+        app_data_btn->setStyleSheet(
+            "QPushButton { padding: 6px 12px; background-color: #4a4a4a; color: #cccccc; border: 1px solid #555555; }"
+            "QPushButton:hover { background-color: #555555; }"
+        );
+        app_data_btn->setToolTip("Open the folder where File Tinder stores its database and settings");
+        connect(app_data_btn, &QPushButton::clicked, this, [this]() {
+            QString data_path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+            if (data_path.isEmpty()) {
+                data_path = QDir::homePath() + "/.local/share/FileTinder";
+            }
+            QDir().mkpath(data_path);
+            QDesktopServices::openUrl(QUrl::fromLocalFile(data_path));
+        });
+        tools_row->addWidget(app_data_btn);
+        
         root_layout->addLayout(tools_row);
         
         // Hotkey hint
@@ -608,11 +628,11 @@ private:
         // Show dashboard
         QDialog dashboard(this);
         dashboard.setWindowTitle("Session Overview");
-        dashboard.setMinimumSize(ui::scaling::scaled(400), ui::scaling::scaled(250));
+        dashboard.setMinimumSize(ui::scaling::scaled(380), ui::scaling::scaled(200));
         
         auto* layout = new QVBoxLayout(&dashboard);
-        layout->setContentsMargins(15, 12, 15, 12);
-        layout->setSpacing(8);
+        layout->setContentsMargins(12, 8, 12, 8);
+        layout->setSpacing(4);
         
         QString header_text = source_folders_.size() > 1
             ? QString("%1 source folders (primary: %2)").arg(source_folders_.size()).arg(chosen_path_)
@@ -752,6 +772,28 @@ private:
             ai_widget_->deleteLater();
             ai_widget_ = nullptr;
         }
+        // Destroy shared folder model when all modes are destroyed
+        if (shared_folder_model_) {
+            shared_folder_model_->deleteLater();
+            shared_folder_model_ = nullptr;
+        }
+    }
+    
+    // Get or create the shared FolderTreeModel for the current folder
+    FolderTreeModel* get_shared_folder_model() {
+        if (!shared_folder_model_ || shared_folder_model_->property("source_folder").toString() != chosen_path_) {
+            if (shared_folder_model_) {
+                shared_folder_model_->deleteLater();
+            }
+            shared_folder_model_ = new FolderTreeModel(this);
+            shared_folder_model_->set_root_folder(chosen_path_);
+            shared_folder_model_->setProperty("source_folder", chosen_path_);
+            // Load saved folder tree from DB
+            shared_folder_model_->blockSignals(true);
+            shared_folder_model_->load_from_database(db_manager_, chosen_path_);
+            shared_folder_model_->blockSignals(false);
+        }
+        return shared_folder_model_;
     }
     
     void return_to_launcher() {
@@ -840,7 +882,7 @@ private:
         }
         
         if (!advanced_widget_) {
-            advanced_widget_ = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+            advanced_widget_ = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this, source_folders_, get_shared_folder_model());
             connect(advanced_widget_, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this]() {
                 skip_stats_on_next_launch_ = true;
                 launch_basic();
@@ -881,7 +923,7 @@ private:
         }
         
         if (!ai_widget_) {
-            ai_widget_ = new AiFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+            ai_widget_ = new AiFileTinderDialog(chosen_path_, db_manager_, this, source_folders_, get_shared_folder_model());
             connect(ai_widget_, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this]() {
                 skip_stats_on_next_launch_ = true;
                 launch_basic();
