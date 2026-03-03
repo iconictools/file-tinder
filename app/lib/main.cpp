@@ -29,6 +29,7 @@
 #include "FileTinderExecutor.hpp"
 #include "AppLogger.hpp"
 #include "ui_constants.hpp"
+#include "UserDataDialog.hpp"
 
 class FileTinderLauncher : public QDialog {
     Q_OBJECT
@@ -280,7 +281,7 @@ private:
         
         root_layout->addLayout(modes_row);
         
-        // Tools row: Clear Session + Undo History + Diagnostics
+        // Tools row: Clear Session + Undo History + User Data
         auto* tools_row = new QHBoxLayout();
         
         auto* clear_btn = new QPushButton("Clear Session");
@@ -316,17 +317,16 @@ private:
         });
         tools_row->addWidget(theme_btn);
         
-        auto* diag_btn = new QPushButton("Diagnostics");
-        diag_btn->setStyleSheet(
+        auto* user_data_btn = new QPushButton("User Data");
+        user_data_btn->setStyleSheet(
             "QPushButton { padding: 6px 12px; background-color: #4a4a4a; color: #cccccc; border: 1px solid #555555; }"
             "QPushButton:hover { background-color: #555555; }"
         );
-        connect(diag_btn, &QPushButton::clicked, this, [this]() {
-            QMessageBox::information(this, "Diagnostics Deprecated",
-                "The built-in diagnostic tool has been deprecated.\n\n"
-                "For debugging, use the application log file and system monitoring tools.");
+        connect(user_data_btn, &QPushButton::clicked, this, [this]() {
+            UserDataDialog dialog(db_manager_, this);
+            dialog.exec();
         });
-        tools_row->addWidget(diag_btn);
+        tools_row->addWidget(user_data_btn);
         
         root_layout->addLayout(tools_row);
         

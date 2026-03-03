@@ -70,8 +70,10 @@ public:
     bool save_execution_log(const QString& session_folder, const QString& action,
                            const QString& source_path, const QString& dest_path);
     std::vector<std::tuple<int, QString, QString, QString, QString>> get_execution_log(const QString& session_folder);
+    std::vector<std::tuple<int, QString, QString, QString, QString>> get_all_execution_logs();
     bool remove_execution_log_entry(int id);
     bool clear_execution_log(const QString& session_folder);
+    bool clear_all_execution_logs();
     
     // Grid configuration save/load
     bool save_grid_config(const QString& session_folder, const QString& config_name,

@@ -512,6 +512,59 @@ bool DatabaseManager::clear_execution_log(const QString& session_folder) {
     return query.exec();
 }
 
+std::vector<std::tuple<int, QString, QString, QString, QString>> DatabaseManager::get_all_execution_logs() {
+    std::vector<std::tuple<int, QString, QString, QString, QString>> entries;
+
+    execute_query(R"(
+        CREATE TABLE IF NOT EXISTS execution_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_folder TEXT NOT NULL,
+            action TEXT NOT NULL,
+            source_path TEXT NOT NULL,
+            dest_path TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    )");
+
+    QSqlQuery query(db_);
+    query.prepare(R"(
+        SELECT id, action, source_path, dest_path, timestamp
+        FROM execution_log
+        ORDER BY id DESC
+    )");
+
+    if (query.exec()) {
+        while (query.next()) {
+            entries.emplace_back(
+                query.value(0).toInt(),
+                query.value(1).toString(),
+                query.value(2).toString(),
+                query.value(3).toString(),
+                query.value(4).toString()
+            );
+        }
+    }
+
+    return entries;
+}
+
+bool DatabaseManager::clear_all_execution_logs() {
+    execute_query(R"(
+        CREATE TABLE IF NOT EXISTS execution_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_folder TEXT NOT NULL,
+            action TEXT NOT NULL,
+            source_path TEXT NOT NULL,
+            dest_path TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    )");
+
+    QSqlQuery query(db_);
+    query.prepare("DELETE FROM execution_log");
+    return query.exec();
+}
+
 bool DatabaseManager::save_grid_config(const QString& session_folder, const QString& config_name,
                                        const QStringList& folder_paths) {
     // Delete existing config with this name

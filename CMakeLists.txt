@@ -20,7 +20,7 @@ set(SOURCES
     app/lib/FileTinderExecutor.cpp
     app/lib/MindMapView.cpp
     app/lib/AppLogger.cpp
-    app/lib/DiagnosticTool.cpp
+    app/lib/UserDataDialog.cpp
     app/lib/FilterWidget.cpp
     app/lib/ImagePreviewWindow.cpp
     app/lib/AiFileTinderDialog.cpp
@@ -39,7 +39,7 @@ set(HEADERS
     app/include/MindMapView.hpp
     app/include/ui_constants.hpp
     app/include/AppLogger.hpp
-    app/include/DiagnosticTool.hpp
+    app/include/UserDataDialog.hpp
     app/include/FilterWidget.hpp
     app/include/ImagePreviewWindow.hpp
     app/include/AiFileTinderDialog.hpp
