@@ -309,41 +309,36 @@ void StandaloneFileTinderDialog::setup_ui() {
         update_progress();
     });
     
-    // File card — preview + info panel
+    // File card — compact info panel (preview is in separate window)
     auto* file_card = new QWidget();
     file_card->setStyleSheet(
         "QWidget#fileCard { background-color: #2c3e50; border-radius: 8px; "
         "border: 1px solid #34495e; }");
     file_card->setObjectName("fileCard");
     auto* card_layout = new QVBoxLayout(file_card);
-    card_layout->setContentsMargins(12, 8, 12, 8);
-    card_layout->setSpacing(4);
+    card_layout->setContentsMargins(12, 6, 12, 6);
+    card_layout->setSpacing(2);
     
     // Centered file icon (extension badge)
     file_icon_label_ = new QLabel();
     file_icon_label_->setAlignment(Qt::AlignCenter);
-    file_icon_label_->setStyleSheet("font-size: 48px;");
+    file_icon_label_->setStyleSheet("font-size: 36px;");
     file_icon_label_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     card_layout->addWidget(file_icon_label_);
     
-    // Preview label (for images/text) — wrapped in scroll area
+    // Inline preview — compact thumbnail/summary only
     preview_label_ = new QLabel();
     preview_label_->setAlignment(Qt::AlignCenter);
     preview_label_->setWordWrap(true);
-    preview_label_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    auto* preview_scroll = new QScrollArea();
-    preview_scroll->setWidget(preview_label_);
-    preview_scroll->setWidgetResizable(true);
-    preview_scroll->setFrameShape(QFrame::NoFrame);
-    preview_scroll->setStyleSheet("QScrollArea { background: transparent; }");
-    preview_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    card_layout->addWidget(preview_scroll, 1);
+    preview_label_->setMaximumHeight(ui::scaling::scaled(120));
+    preview_label_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+    card_layout->addWidget(preview_label_);
     
     // File name and info — double-click to open
     file_info_label_ = new QLabel();
     file_info_label_->setAlignment(Qt::AlignCenter);
     file_info_label_->setStyleSheet(
-        "color: #ecf0f1; padding: 6px 10px; font-size: 13px; "
+        "color: #ecf0f1; padding: 4px 8px; font-size: 13px; "
         "background-color: #34495e; border-radius: 4px;");
     file_info_label_->setWordWrap(true);
     file_info_label_->setCursor(Qt::PointingHandCursor);
@@ -355,13 +350,13 @@ void StandaloneFileTinderDialog::setup_ui() {
     size_badge_label_ = new QLabel();
     size_badge_label_->setAlignment(Qt::AlignCenter);
     size_badge_label_->setStyleSheet(
-        "font-size: 16px; font-weight: bold; color: #f39c12; "
-        "padding: 2px 8px; border-radius: 4px;"
+        "font-size: 14px; font-weight: bold; color: #f39c12; "
+        "padding: 1px 6px; border-radius: 4px;"
     );
     size_badge_label_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     card_layout->addWidget(size_badge_label_);
     
-    main_layout->addWidget(file_card, 1);  // Stretch to fill available space
+    main_layout->addWidget(file_card);
     
     // Progress section
     auto* progress_widget = new QWidget();
@@ -718,6 +713,11 @@ void StandaloneFileTinderDialog::show_current_file() {
     if (keep_btn_) keep_btn_->setEnabled(has_file);
     if (delete_btn_) delete_btn_->setEnabled(has_file);
     if (sort_later_btn_) sort_later_btn_->setEnabled(has_file);
+    
+    // Update separate preview window if open
+    if (image_preview_window_ && image_preview_window_->isVisible()) {
+        image_preview_window_->set_image(file.path);
+    }
 }
 
 void StandaloneFileTinderDialog::update_preview(const QString& file_path) {
@@ -731,7 +731,6 @@ void StandaloneFileTinderDialog::update_preview(const QString& file_path) {
     // Clear previous content
     if (file_icon_label_) file_icon_label_->clear();
     preview_label_->clear();
-    // Reset style and alignment from any previous text file preview
     preview_label_->setStyleSheet("");
     preview_label_->setAlignment(Qt::AlignCenter);
     
@@ -740,19 +739,16 @@ void StandaloneFileTinderDialog::update_preview(const QString& file_path) {
     if (ext.isEmpty()) ext = finfo.isDir() ? "DIR" : "FILE";
     QString icon = "[" + ext + "]";
     
-    // Set the centered icon
     if (file_icon_label_) {
-        file_icon_label_->setText(QString("<span style='font-family: monospace; font-size: 48px; "
+        file_icon_label_->setText(QString("<span style='font-family: monospace; font-size: 36px; "
                                           "color: #3498db; font-weight: bold;'>%1</span>").arg(icon));
     }
     
-    // For images, use QImageReader with scaled size for efficient loading
-    // (avoids loading full resolution into memory, then scaling — much faster for large images)
+    // Compact inline thumbnail for images
     if (type.startsWith("image/") && !finfo.isDir()) {
         QImageReader reader(file_path);
         if (reader.canRead()) {
-            int max_w = preview_label_->width() > 100 ? preview_label_->width() - 20 : 400;
-            int max_h = preview_label_->height() > 100 ? preview_label_->height() - 20 : 300;
+            int max_w = 160, max_h = 100;
             QSize orig = reader.size();
             if (orig.isValid()) {
                 reader.setScaledSize(orig.scaled(max_w, max_h, Qt::KeepAspectRatio));
@@ -765,18 +761,16 @@ void StandaloneFileTinderDialog::update_preview(const QString& file_path) {
         }
     }
     
-    // For text files, show content preview
+    // For text files, show a brief snippet
     if (type.startsWith("text/") && !finfo.isDir()) {
         QFile file(file_path);
         if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QTextStream stream(&file);
-            QString content = stream.read(1500);  // Reduced to avoid overflow
-            if (!stream.atEnd()) {
-                content += "\n...(truncated)";
-            }
+            QString content = stream.read(300);
+            if (!stream.atEnd()) content += "\n...";
             preview_label_->setText(content);
             preview_label_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-            preview_label_->setStyleSheet("color: #ecf0f1; font-family: monospace; font-size: 11px;");
+            preview_label_->setStyleSheet("color: #ecf0f1; font-family: monospace; font-size: 10px;");
             return;
         }
     }
@@ -786,13 +780,12 @@ void StandaloneFileTinderDialog::update_preview(const QString& file_path) {
         QDir dir(file_path);
         int file_count = dir.entryList(QDir::Files | QDir::NoDotAndDotDot).count();
         int dir_count = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot).count();
-        preview_label_->setText(QString("Directory contains:\n%1 files\n%2 subdirectories")
-                               .arg(file_count).arg(dir_count));
+        preview_label_->setText(QString("%1 files, %2 subdirectories").arg(file_count).arg(dir_count));
         return;
     }
     
-    // Default: show MIME type info
-    preview_label_->setText(QString("File Type: %1\n\nNo preview available").arg(mime_type.comment()));
+    // Default
+    preview_label_->setText(QString("%1 — No preview").arg(mime_type.comment()));
 }
 
 void StandaloneFileTinderDialog::update_file_info(const FileToProcess& file) {
@@ -1214,13 +1207,31 @@ void StandaloneFileTinderDialog::on_redo() {
 
 void StandaloneFileTinderDialog::on_show_preview() {
     try {
-        // Toggle inline preview visibility in basic mode
-        if (preview_label_) {
-            bool showing = preview_label_->isVisible();
-            preview_label_->setVisible(!showing);
-            if (file_icon_label_) file_icon_label_->setVisible(!showing);
-            if (preview_btn_) preview_btn_->setChecked(!showing);
+        int file_idx = get_current_file_index();
+        if (file_idx < 0 || file_idx >= static_cast<int>(files_.size())) return;
+        const auto& file = files_[file_idx];
+        
+        // Open / close the separate preview window
+        if (image_preview_window_ && image_preview_window_->isVisible()) {
+            image_preview_window_->close();
+            if (preview_btn_) preview_btn_->setChecked(false);
+            return;
         }
+        
+        if (!image_preview_window_) {
+            image_preview_window_ = new ImagePreviewWindow(this);
+            image_preview_window_->setWindowFlags(Qt::Window);
+            connect(image_preview_window_, &ImagePreviewWindow::next_requested, this, [this]() {
+                on_sort_later();  // advance to next
+            });
+            connect(image_preview_window_, &ImagePreviewWindow::previous_requested, this, [this]() {
+                on_undo();
+            });
+        }
+        image_preview_window_->set_image(file.path);
+        image_preview_window_->show();
+        image_preview_window_->raise();
+        if (preview_btn_) preview_btn_->setChecked(true);
     } catch (const std::exception& ex) {
         LOG_ERROR("BasicMode", QString("Error in on_show_preview: %1").arg(ex.what()));
     }
