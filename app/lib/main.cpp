@@ -608,9 +608,11 @@ private:
         // Show dashboard
         QDialog dashboard(this);
         dashboard.setWindowTitle("Session Overview");
-        dashboard.setMinimumSize(ui::scaling::scaled(450), ui::scaling::scaled(350));
+        dashboard.setMinimumSize(ui::scaling::scaled(400), ui::scaling::scaled(250));
         
         auto* layout = new QVBoxLayout(&dashboard);
+        layout->setContentsMargins(15, 12, 15, 12);
+        layout->setSpacing(8);
         
         QString header_text = source_folders_.size() > 1
             ? QString("%1 source folders (primary: %2)").arg(source_folders_.size()).arg(chosen_path_)
@@ -621,16 +623,18 @@ private:
         layout->addWidget(header);
         
         auto* summary = new QLabel(QString(
-            "<div style='font-size: 14px; margin: 10px 0;'>"
+            "<span style='font-size: 13px;'>"
             "<b>%1 files</b> &middot; %2 total &middot; <b>%3 subfolders</b>"
-            "</div>"
+            "</span>"
         ).arg(all_files.size()).arg(size_str).arg(folder_count));
         layout->addWidget(summary);
         
         // Type breakdown
         auto* breakdown = new QWidget();
-        breakdown->setStyleSheet("background-color: #34495e; border-radius: 8px; padding: 12px;");
+        breakdown->setStyleSheet("background-color: #34495e; border-radius: 6px; padding: 8px;");
         auto* bd_layout = new QVBoxLayout(breakdown);
+        bd_layout->setContentsMargins(8, 6, 8, 6);
+        bd_layout->setSpacing(2);
         
         auto add_row = [&](const QString& label, int count, const QString& color) {
             if (count == 0) return;
@@ -652,8 +656,10 @@ private:
         // Folder section
         if (folder_count > 0) {
             auto* folder_widget = new QWidget();
-            folder_widget->setStyleSheet("background-color: #2c3e50; border-radius: 8px; padding: 10px;");
+            folder_widget->setStyleSheet("background-color: #2c3e50; border-radius: 6px; padding: 6px;");
             auto* folder_layout = new QVBoxLayout(folder_widget);
+            folder_layout->setContentsMargins(8, 4, 8, 4);
+            folder_layout->setSpacing(2);
             
             auto* folder_header = new QLabel(QString(
                 "<span style='color: #ecf0f1; font-size: 13px; font-weight: bold;'>Subfolders (%1)</span>"
@@ -781,8 +787,9 @@ private:
         
         LOG_INFO("Launcher", "Starting basic mode");
         
-        // Save launcher size before resizing for mode
-        launcher_size_ = size();
+        // Save launcher size only when leaving the launcher page
+        if (stack_->currentWidget() == launcher_page_)
+            launcher_size_ = size();
         
         // Destroy old widget if source folder changed
         if (basic_widget_ && basic_widget_->source_folder() != chosen_path_) {

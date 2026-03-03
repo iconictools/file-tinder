@@ -149,8 +149,8 @@ QString StandaloneFileTinderDialog::get_last_folder() {
 
 void StandaloneFileTinderDialog::setup_ui() {
     auto* main_layout = new QVBoxLayout(this);
-    main_layout->setContentsMargins(15, 15, 15, 15);
-    main_layout->setSpacing(10);
+    main_layout->setContentsMargins(10, 8, 10, 8);
+    main_layout->setSpacing(6);
     
     // Top bar: Title + Mode switch (upper right)
     auto* top_bar = new QWidget();
@@ -228,8 +228,8 @@ void StandaloneFileTinderDialog::setup_ui() {
     // Filter/Sort bar
     auto* filter_bar = new QWidget();
     auto* filter_layout = new QHBoxLayout(filter_bar);
-    filter_layout->setContentsMargins(0, 5, 0, 5);
-    filter_layout->setSpacing(10);
+    filter_layout->setContentsMargins(0, 3, 0, 3);
+    filter_layout->setSpacing(8);
     
     // Filter
     filter_layout->addWidget(new QLabel("Filter:"));
@@ -255,19 +255,27 @@ void StandaloneFileTinderDialog::setup_ui() {
             this, &StandaloneFileTinderDialog::on_filter_changed);
     filter_layout->addWidget(filter_combo_);
     
-    // Include folders checkbox
+    // Subfolder options — stacked vertically beside the filter combo
+    auto* subfolder_col = new QVBoxLayout();
+    subfolder_col->setContentsMargins(0, 0, 0, 0);
+    subfolder_col->setSpacing(1);
+    
     folders_checkbox_ = new QCheckBox("Include Folders");
-    folders_checkbox_->setStyleSheet("color: #bdc3c7;");
+    folders_checkbox_->setStyleSheet("color: #bdc3c7; font-size: 11px;");
     connect(folders_checkbox_, &QCheckBox::stateChanged, 
             this, &StandaloneFileTinderDialog::on_folders_toggle_changed);
-    filter_layout->addWidget(folders_checkbox_);
+    subfolder_col->addWidget(folders_checkbox_);
     
-    // Subfolder depth spin box
-    filter_layout->addWidget(new QLabel("Subfolder depth:"));
+    auto* depth_row = new QHBoxLayout();
+    depth_row->setContentsMargins(0, 0, 0, 0);
+    depth_row->setSpacing(4);
+    auto* depth_label = new QLabel("Depth:");
+    depth_label->setStyleSheet("font-size: 11px; color: #95a5a6;");
+    depth_row->addWidget(depth_label);
     subfolder_depth_spin_ = new QSpinBox();
     subfolder_depth_spin_->setRange(0, 5);
     subfolder_depth_spin_->setValue(1);
-    subfolder_depth_spin_->setMaximumWidth(50);
+    subfolder_depth_spin_->setMaximumWidth(45);
     subfolder_depth_spin_->setToolTip("How many levels of subfolders to include (0 = top-level only)");
     subfolder_depth_spin_->setEnabled(false);
     connect(folders_checkbox_, &QCheckBox::toggled, subfolder_depth_spin_, &QSpinBox::setEnabled);
@@ -304,8 +312,18 @@ void StandaloneFileTinderDialog::setup_ui() {
         if (!filtered_indices_.empty()) show_current_file();
         update_progress();
     });
+    depth_row->addWidget(subfolder_depth_spin_);
+    depth_row->addStretch();
+    subfolder_col->addLayout(depth_row);
     
-    filter_layout->addSpacing(20);
+    filter_layout->addLayout(subfolder_col);
+    
+    // Visual separator
+    auto* sep = new QFrame();
+    sep->setFrameShape(QFrame::VLine);
+    sep->setFrameShadow(QFrame::Sunken);
+    sep->setStyleSheet("color: #555;");
+    filter_layout->addWidget(sep);
     
     // Sort
     filter_layout->addWidget(new QLabel("Sort:"));
@@ -336,7 +354,7 @@ void StandaloneFileTinderDialog::setup_ui() {
     connect(sort_order_btn_, &QPushButton::clicked, this, &StandaloneFileTinderDialog::on_sort_order_toggled);
     filter_layout->addWidget(sort_order_btn_);
     
-    // Preview toggle checkbox (near sort controls)
+    // Preview toggle — opens separate preview window
     preview_btn_ = new QPushButton("Preview");
     preview_btn_->setFixedHeight(ui::scaling::scaled(28));
     preview_btn_->setCheckable(true);
@@ -353,55 +371,59 @@ void StandaloneFileTinderDialog::setup_ui() {
     filter_layout->addStretch();
     main_layout->addWidget(filter_bar);
     
-    // File card — unified preview + info + stats panel
+    // File card — preview + info panel
     auto* file_card = new QWidget();
     file_card->setStyleSheet(
         "QWidget#fileCard { background-color: #2c3e50; border-radius: 8px; "
         "border: 1px solid #34495e; }");
     file_card->setObjectName("fileCard");
     auto* card_layout = new QVBoxLayout(file_card);
-    card_layout->setContentsMargins(15, 10, 15, 10);
-    card_layout->setSpacing(6);
+    card_layout->setContentsMargins(12, 8, 12, 8);
+    card_layout->setSpacing(4);
     
-    // Centered file icon (for non-image files)
+    // Centered file icon (extension badge)
     file_icon_label_ = new QLabel();
     file_icon_label_->setAlignment(Qt::AlignCenter);
-    file_icon_label_->setStyleSheet("font-size: 64px;");
+    file_icon_label_->setStyleSheet("font-size: 48px;");
+    file_icon_label_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     card_layout->addWidget(file_icon_label_);
     
-    // Preview label (for images/text) — wrapped in scroll area to prevent
-    // text previews from expanding the window beyond its intended size
+    // Preview label (for images/text) — wrapped in scroll area
     preview_label_ = new QLabel();
     preview_label_->setAlignment(Qt::AlignCenter);
     preview_label_->setWordWrap(true);
+    preview_label_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     auto* preview_scroll = new QScrollArea();
     preview_scroll->setWidget(preview_label_);
     preview_scroll->setWidgetResizable(true);
     preview_scroll->setFrameShape(QFrame::NoFrame);
     preview_scroll->setStyleSheet("QScrollArea { background: transparent; }");
+    preview_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     card_layout->addWidget(preview_scroll, 1);
     
     // File name and info — double-click to open
     file_info_label_ = new QLabel();
     file_info_label_->setAlignment(Qt::AlignCenter);
     file_info_label_->setStyleSheet(
-        "color: #ecf0f1; padding: 8px 10px; font-size: 13px; "
+        "color: #ecf0f1; padding: 6px 10px; font-size: 13px; "
         "background-color: #34495e; border-radius: 4px;");
     file_info_label_->setWordWrap(true);
     file_info_label_->setCursor(Qt::PointingHandCursor);
     file_info_label_->setToolTip("Double-click to open file");
     file_info_label_->installEventFilter(this);
+    file_info_label_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     card_layout->addWidget(file_info_label_);
     
     size_badge_label_ = new QLabel();
     size_badge_label_->setAlignment(Qt::AlignCenter);
     size_badge_label_->setStyleSheet(
         "font-size: 16px; font-weight: bold; color: #f39c12; "
-        "padding: 4px 8px; border-radius: 4px;"
+        "padding: 2px 8px; border-radius: 4px;"
     );
+    size_badge_label_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     card_layout->addWidget(size_badge_label_);
     
-    main_layout->addWidget(file_card, 1);  // Stretch to fill space
+    main_layout->addWidget(file_card, 1);  // Stretch to fill available space
     
     // Progress section
     auto* progress_widget = new QWidget();
