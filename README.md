@@ -77,7 +77,7 @@ All three modes share the same session state, so you can switch between them fre
 - **Folder picker**: Browse button beside each destination for selecting folders outside the grid
 - **Destination disambiguation**: When folders share names, shows parent/name to distinguish
 - **Copy mode**: Change any row to "copy" to duplicate rather than move
-- **Done button**: Closes results. Undone operations become permanent after this.
+- **Consolidate button**: Finalizes all changes. Operations can no longer be undone after this.
 - **Export log**: Save execution results as CSV
 
 ### Execution Results

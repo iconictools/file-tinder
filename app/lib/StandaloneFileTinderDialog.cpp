@@ -1828,8 +1828,10 @@ void StandaloneFileTinderDialog::execute_decisions() {
     // Show execution results dialog with undo + stats
     show_execution_results(result, elapsed_ms);
     
-    // Clear session decisions (but execution log persists for undo)
+    // Consolidate: clear session decisions AND execution log
+    // After this point, operations cannot be undone (the meaning of "Consolidate")
     db_.clear_session(source_folder_);
+    db_.clear_execution_log(source_folder_);
     
     emit session_completed();
     emit request_back();
@@ -2073,13 +2075,13 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
     auto* btn_layout = new QHBoxLayout();
     btn_layout->addStretch();
     
-    auto* close_btn = new QPushButton("Done");
+    auto* close_btn = new QPushButton("Consolidate");
     close_btn->setStyleSheet(
         "QPushButton { background-color: #27ae60; color: white; font-weight: bold; "
         "padding: 10px 25px; border-radius: 6px; }"
         "QPushButton:hover { background-color: #2ecc71; }"
     );
-    close_btn->setToolTip("Close results — undone operations become permanent");
+    close_btn->setToolTip("Finalize all changes — operations can no longer be undone after this");
     connect(close_btn, &QPushButton::clicked, &results_dialog, &QDialog::accept);
     btn_layout->addWidget(close_btn);
     

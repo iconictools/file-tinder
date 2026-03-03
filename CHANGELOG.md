@@ -71,7 +71,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed (naming/consistency refinements)
 - **"Finish Review" / "Finish & Execute" → "Review & Execute"** — unified across Basic and Advanced modes
 - **"Cancel" → "Back"** in Advanced/AI mode bottom bar (clearer in single-window context)
-- **"Consolidate" → "Done"** in execution results dialog (less confusing)
+- **Consolidate now clears execution log** — clicking Consolidate in the results dialog clears the execution history, making all operations truly permanent (no more undoing via launcher's Undo History after consolidation)
 - **Launcher mode descriptions** updated: "Simple sorting" → "Keep / Delete / Sort Later", "Folder tree view" → "Folder grid + assignment", "AI-assisted sorting" → "Auto-sort with AI suggestions"
 - **Launcher hotkey hint** expanded with Y=Redo, P=Preview, ?=Help, Enter=Review
 
