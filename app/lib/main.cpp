@@ -21,6 +21,7 @@
 #include <QTimer>
 #include <QMimeDatabase>
 #include <QProgressDialog>
+#include <QStackedWidget>
 
 #include "DatabaseManager.hpp"
 #include "StandaloneFileTinderDialog.hpp"
@@ -31,16 +32,16 @@
 #include "ui_constants.hpp"
 #include "UserDataDialog.hpp"
 
-class FileTinderLauncher : public QDialog {
+class FileTinderLauncher : public QWidget {
     Q_OBJECT
     
 public:
     FileTinderLauncher(QWidget* parent_widget = nullptr) 
-        : QDialog(parent_widget)
+        : QWidget(parent_widget)
         , db_manager_()
         , chosen_path_() {
         
-        setWindowTitle("File Tinder Launcher");
+        setWindowTitle("File Tinder");
         setMinimumSize(ui::scaling::scaled(550), ui::scaling::scaled(450));
         
         LOG_INFO("Launcher", "Application starting");
@@ -56,7 +57,15 @@ public:
             }
         }
         
+        // Set up the stacked widget architecture
+        stack_ = new QStackedWidget(this);
+        launcher_page_ = new QWidget();
         build_interface();
+        stack_->addWidget(launcher_page_);  // index 0
+        
+        auto* main_layout = new QVBoxLayout(this);
+        main_layout->setContentsMargins(0, 0, 0, 0);
+        main_layout->addWidget(stack_);
         
         // Load theme preference
         QSettings theme_settings("FileTinder", "FileTinder");
@@ -78,12 +87,7 @@ public:
             );
             
             // Check for resumable session
-            int progress = db_manager_.get_session_progress_count(last_folder);
-            if (progress > 0 && resume_label_) {
-                resume_label_->setText(QString("Session in progress: %1 files sorted. Click a mode to resume.")
-                    .arg(progress));
-                resume_label_->setVisible(true);
-            }
+            check_session_state();
         }
     }
     
@@ -99,6 +103,13 @@ private:
     QLabel* resume_label_ = nullptr;
     bool skip_stats_on_next_launch_ = false;  // Skip stats dashboard on mode switch
     bool is_dark_theme_ = true;
+    
+    // Stacked widget architecture
+    QStackedWidget* stack_ = nullptr;
+    QWidget* launcher_page_ = nullptr;
+    StandaloneFileTinderDialog* basic_widget_ = nullptr;
+    AdvancedFileTinderDialog* advanced_widget_ = nullptr;
+    AiFileTinderDialog* ai_widget_ = nullptr;
     
     void apply_theme() {
         QPalette p;
@@ -155,11 +166,11 @@ private:
                 }
             }
         }
-        return QDialog::eventFilter(obj, event);
+        return QWidget::eventFilter(obj, event);
     }
     
     void build_interface() {
-        auto* root_layout = new QVBoxLayout(this);
+        auto* root_layout = new QVBoxLayout(launcher_page_);
         root_layout->setContentsMargins(25, 25, 25, 25);
         root_layout->setSpacing(18);
         
@@ -667,9 +678,45 @@ private:
         return true;
     }
     
+    void destroy_all_mode_widgets() {
+        // Use a cast-safe approach for derived types
+        if (basic_widget_) {
+            stack_->removeWidget(basic_widget_);
+            basic_widget_->deleteLater();
+            basic_widget_ = nullptr;
+        }
+        if (advanced_widget_) {
+            stack_->removeWidget(advanced_widget_);
+            advanced_widget_->deleteLater();
+            advanced_widget_ = nullptr;
+        }
+        if (ai_widget_) {
+            stack_->removeWidget(ai_widget_);
+            ai_widget_->deleteLater();
+            ai_widget_ = nullptr;
+        }
+    }
+    
+    void return_to_launcher() {
+        stack_->setCurrentWidget(launcher_page_);
+        setWindowTitle("File Tinder");
+        check_session_state();
+    }
+    
+    void check_session_state() {
+        if (chosen_path_.isEmpty() || !resume_label_) return;
+        int progress = db_manager_.get_session_progress_count(chosen_path_);
+        if (progress > 0) {
+            resume_label_->setText(QString("Session in progress: %1 files sorted. Click a mode to resume.")
+                .arg(progress));
+            resume_label_->setVisible(true);
+        } else {
+            resume_label_->setVisible(false);
+        }
+    }
+    
     void launch_basic() {
         if (!validate_folder()) return;
-        // Skip stats dashboard on mode switch (already shown once)
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;
         } else {
@@ -678,29 +725,35 @@ private:
         
         LOG_INFO("Launcher", "Starting basic mode");
         
-        auto* dlg = new StandaloneFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+        // Destroy old widget if source folder changed
+        if (basic_widget_ && basic_widget_->source_folder() != chosen_path_) {
+            stack_->removeWidget(basic_widget_);
+            basic_widget_->deleteLater();
+            basic_widget_ = nullptr;
+        }
         
-        connect(dlg, &StandaloneFileTinderDialog::switch_to_advanced_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            // Defer mode switch to break recursive exec() chain
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_advanced);
-        });
+        if (!basic_widget_) {
+            basic_widget_ = new StandaloneFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+            connect(basic_widget_, &StandaloneFileTinderDialog::switch_to_advanced_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_advanced();
+            });
+            connect(basic_widget_, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_ai();
+            });
+            connect(basic_widget_, &StandaloneFileTinderDialog::request_back, this, [this]() {
+                return_to_launcher();
+            });
+            stack_->addWidget(basic_widget_);
+            basic_widget_->initialize();
+        }
         
-        connect(dlg, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_ai);
-        });
-        
-        dlg->initialize();
-        dlg->exec();
-        dlg->deleteLater();
+        stack_->setCurrentWidget(basic_widget_);
     }
     
     void launch_advanced() {
         if (!validate_folder()) return;
-        // Skip stats dashboard on mode switch (already shown once)
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;
         } else {
@@ -709,24 +762,30 @@ private:
         
         LOG_INFO("Launcher", "Starting advanced mode");
         
-        auto* dlg = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+        if (advanced_widget_ && advanced_widget_->source_folder() != chosen_path_) {
+            stack_->removeWidget(advanced_widget_);
+            advanced_widget_->deleteLater();
+            advanced_widget_ = nullptr;
+        }
         
-        connect(dlg, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            // Defer mode switch to break recursive exec() chain
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_basic);
-        });
+        if (!advanced_widget_) {
+            advanced_widget_ = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+            connect(advanced_widget_, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_basic();
+            });
+            connect(advanced_widget_, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_ai();
+            });
+            connect(advanced_widget_, &StandaloneFileTinderDialog::request_back, this, [this]() {
+                return_to_launcher();
+            });
+            stack_->addWidget(advanced_widget_);
+            advanced_widget_->initialize();
+        }
         
-        connect(dlg, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_ai);
-        });
-        
-        dlg->initialize();
-        dlg->exec();
-        dlg->deleteLater();
+        stack_->setCurrentWidget(advanced_widget_);
     }
     
     void launch_ai() {
@@ -739,23 +798,30 @@ private:
         
         LOG_INFO("Launcher", "Starting AI mode");
         
-        auto* dlg = new AiFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+        if (ai_widget_ && ai_widget_->source_folder() != chosen_path_) {
+            stack_->removeWidget(ai_widget_);
+            ai_widget_->deleteLater();
+            ai_widget_ = nullptr;
+        }
         
-        connect(dlg, &AiFileTinderDialog::switch_to_basic_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_basic);
-        });
+        if (!ai_widget_) {
+            ai_widget_ = new AiFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+            connect(ai_widget_, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_basic();
+            });
+            connect(ai_widget_, &StandaloneFileTinderDialog::switch_to_advanced_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_advanced();
+            });
+            connect(ai_widget_, &StandaloneFileTinderDialog::request_back, this, [this]() {
+                return_to_launcher();
+            });
+            stack_->addWidget(ai_widget_);
+            ai_widget_->initialize();
+        }
         
-        connect(dlg, &AiFileTinderDialog::switch_to_advanced_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_advanced);
-        });
-        
-        dlg->initialize();
-        dlg->exec();
-        dlg->deleteLater();
+        stack_->setCurrentWidget(ai_widget_);
     }
     
     void clear_session() {
@@ -770,6 +836,7 @@ private:
         
         if (reply == QMessageBox::Yes) {
             db_manager_.clear_session(chosen_path_);
+            destroy_all_mode_widgets();
             if (resume_label_) resume_label_->setVisible(false);
             LOG_INFO("Launcher", QString("Session cleared for: %1").arg(chosen_path_));
             QMessageBox::information(this, "Session Cleared", "Saved progress has been cleared.");

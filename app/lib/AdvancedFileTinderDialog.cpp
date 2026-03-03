@@ -609,7 +609,7 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
     
     auto* cancel_btn = new QPushButton("Cancel");
     cancel_btn->setStyleSheet("QPushButton { padding: 8px 16px; }");
-    connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
+    connect(cancel_btn, &QPushButton::clicked, this, &AdvancedFileTinderDialog::request_close);
     bottom_layout->addWidget(cancel_btn);
     
     auto* reset_btn = new QPushButton("Reset");
@@ -877,7 +877,7 @@ void AdvancedFileTinderDialog::on_folder_context_menu(const QString& folder_path
                         save_folder_tree();
                         save_quick_access();
                         save_session_state();
-                        reject();
+                        request_close();
                     }
                 });
             }
@@ -1141,19 +1141,13 @@ void AdvancedFileTinderDialog::show_current_file() {
     }
 }
 
-void AdvancedFileTinderDialog::closeEvent(QCloseEvent* event) {
-    // Route through reject() — don't delegate to QDialog::closeEvent
-    event->ignore();
-    reject();
-}
-
-void AdvancedFileTinderDialog::reject() {
+void AdvancedFileTinderDialog::request_close() {
     // Save advanced-mode-specific state before base class handles close prompt
     save_folder_tree();
     save_quick_access();
     
-    // Base class reject() shows save prompt and terminates exec()
-    StandaloneFileTinderDialog::reject();
+    // Base class request_close() shows save prompt and emits request_back
+    StandaloneFileTinderDialog::request_close();
 }
 
 bool AdvancedFileTinderDialog::eventFilter(QObject* obj, QEvent* event) {

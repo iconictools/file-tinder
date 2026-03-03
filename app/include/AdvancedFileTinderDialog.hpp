@@ -91,8 +91,7 @@ protected:
 
 private:
     // Event handlers
-    void closeEvent(QCloseEvent* event) override;
-    void reject() override;
+    void request_close();  // saves grid state, then calls base
     bool eventFilter(QObject* obj, QEvent* event) override;
     
     // Keyboard shortcuts

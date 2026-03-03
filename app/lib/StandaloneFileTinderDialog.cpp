@@ -6,6 +6,7 @@
 #include "FileListWindow.hpp"
 #include "DuplicateDetectionWindow.hpp"
 #include "ui_constants.hpp"
+#include <QDialog>
 #include <QDir>
 #include <QFileInfo>
 #include <QFileDialog>
@@ -50,7 +51,7 @@ StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_fol
                                                        DatabaseManager& db,
                                                        QWidget* parent,
                                                        const QStringList& additional_sources)
-    : QDialog(parent)
+    : QWidget(parent)
     , current_filtered_index_(0)
     , source_folder_(source_folder)
     , db_(db)
@@ -1830,7 +1831,7 @@ void StandaloneFileTinderDialog::execute_decisions() {
     db_.clear_session(source_folder_);
     
     emit session_completed();
-    accept();
+    emit request_back();
 }
 
 void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& result, qint64 elapsed_ms) {
@@ -2089,7 +2090,7 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
 void StandaloneFileTinderDialog::keyPressEvent(QKeyEvent* event) {
     // Don't intercept keys when a text input has focus
     if (search_box_ && search_box_->hasFocus()) {
-        QDialog::keyPressEvent(event);
+        QWidget::keyPressEvent(event);
         return;
     }
 
@@ -2167,19 +2168,18 @@ void StandaloneFileTinderDialog::keyPressEvent(QKeyEvent* event) {
             }
             break;
         default:
-            QDialog::keyPressEvent(event);
+            QWidget::keyPressEvent(event);
     }
 }
 
 void StandaloneFileTinderDialog::closeEvent(QCloseEvent* event) {
-    // Don't delegate to QDialog::closeEvent — it accepts the event even if reject() cancels.
-    // Instead, ignore the event and route through reject() which handles save prompt.
+    // Ignore the event and route through request_close() which handles save prompt.
     event->ignore();
-    reject();
+    request_close();
 }
 
 void StandaloneFileTinderDialog::resizeEvent(QResizeEvent* event) {
-    QDialog::resizeEvent(event);
+    QWidget::resizeEvent(event);
     
     // Use debounced timer to update preview after resize stops
     // This prevents stutter during continuous resizing
@@ -2188,10 +2188,10 @@ void StandaloneFileTinderDialog::resizeEvent(QResizeEvent* event) {
     }
 }
 
-void StandaloneFileTinderDialog::reject() {
+void StandaloneFileTinderDialog::request_close() {
     // Guard against re-entrant calls (QMessageBox can trigger events)
     if (closing_) {
-        QDialog::reject();
+        emit request_back();
         return;
     }
     
@@ -2213,9 +2213,9 @@ void StandaloneFileTinderDialog::reject() {
         
         if (reply == QMessageBox::Save) {
             save_session_state();
-            QDialog::reject();
+            emit request_back();
         } else if (reply == QMessageBox::Discard) {
-            QDialog::reject();
+            emit request_back();
         } else {
             // Cancel — don't close
             closing_ = false;
@@ -2223,7 +2223,7 @@ void StandaloneFileTinderDialog::reject() {
     } else {
         // No decisions made, just save state and close
         save_session_state();
-        QDialog::reject();
+        emit request_back();
     }
 }
 
@@ -2296,7 +2296,7 @@ bool StandaloneFileTinderDialog::eventFilter(QObject* obj, QEvent* event) {
         }
         return true;
     }
-    return QDialog::eventFilter(obj, event);
+    return QWidget::eventFilter(obj, event);
 }
 
 void StandaloneFileTinderDialog::on_switch_mode_clicked() {

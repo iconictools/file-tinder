@@ -1,7 +1,7 @@
 #ifndef STANDALONE_FILE_TINDER_DIALOG_HPP
 #define STANDALONE_FILE_TINDER_DIALOG_HPP
 
-#include <QDialog>
+#include <QWidget>
 #include <QLabel>
 #include <QPushButton>
 #include <QProgressBar>
@@ -77,7 +77,7 @@ enum class SortOrder {
     Descending
 };
 
-class StandaloneFileTinderDialog : public QDialog {
+class StandaloneFileTinderDialog : public QWidget {
     Q_OBJECT
 
 public:
@@ -90,6 +90,8 @@ public:
     // Initialize the dialog - must be called after construction
     // This allows derived classes to properly initialize before UI setup
     virtual void initialize();
+    
+    const QString& source_folder() const { return source_folder_; }
     
 protected:
     // File management
@@ -238,13 +240,14 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;  // New: handle resize
-    void reject() override;  // Override to route Escape/close through save logic
+    void request_close();  // Handles save-prompt logic, emits request_back
     bool eventFilter(QObject* obj, QEvent* event) override;  // Double-click to open file
     
 signals:
     void session_completed();
     void switch_to_advanced_mode();
     void switch_to_ai_mode();
+    void request_back();
     
 protected slots:
     void on_switch_mode_clicked();
