@@ -26,6 +26,7 @@ set(SOURCES
     app/lib/AiFileTinderDialog.cpp
     app/lib/FileListWindow.cpp
     app/lib/DuplicateDetectionWindow.cpp
+    app/lib/ManualEditDialog.cpp
 )
 
 # Header files
@@ -44,6 +45,7 @@ set(HEADERS
     app/include/AiFileTinderDialog.hpp
     app/include/FileListWindow.hpp
     app/include/DuplicateDetectionWindow.hpp
+    app/include/ManualEditDialog.hpp
 )
 
 # Resources

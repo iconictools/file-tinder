@@ -1,4 +1,5 @@
 #include "AdvancedFileTinderDialog.hpp"
+#include "ManualEditDialog.hpp"
 #include "FileListWindow.hpp"
 #include "FolderTreeModel.hpp"
 #include "MindMapView.hpp"
@@ -739,6 +740,26 @@ void AdvancedFileTinderDialog::prompt_add_folder() {
                 }
                 if (folder_model_) folder_model_->add_folder(folder, false);
                 added++;
+            }
+            if (added > 0 && mind_map_view_) mind_map_view_->refresh_layout();
+        }
+    });
+    
+    menu.addAction("Manual Edit...", [this]() {
+        QStringList current_folders = get_destination_folders();
+        ManualEditDialog dlg(source_folder_, current_folders, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            QStringList new_folders = dlg.get_folders();
+            // Add any new folders to the grid
+            int added = 0;
+            if (folder_model_) {
+                for (const QString& folder : new_folders) {
+                    if (folder.isEmpty() || folder == source_folder_) continue;
+                    if (folder_model_->find_node(folder)) continue;
+                    bool is_virtual = !QDir(folder).exists();
+                    folder_model_->add_folder(folder, is_virtual);
+                    added++;
+                }
             }
             if (added > 0 && mind_map_view_) mind_map_view_->refresh_layout();
         }

@@ -292,8 +292,16 @@ void StandaloneFileTinderDialog::setup_ui() {
                 return;
             }
         }
+        keep_count_ = 0;
+        delete_count_ = 0;
+        sort_later_count_ = 0;
+        move_count_ = 0;
+        scan_files();
+        apply_sort();
         rebuild_filtered_indices();
-        show_current_file();
+        load_session_state();
+        if (!filtered_indices_.empty()) show_current_file();
+        update_progress();
     });
     
     filter_layout->addSpacing(20);
@@ -634,11 +642,8 @@ void StandaloneFileTinderDialog::scan_files() {
         return;
     }
     
-    // Include both files and directories based on settings
-    QDir::Filters filters = QDir::Files | QDir::NoDotAndDotDot;
-    if (include_folders_) {
-        filters |= QDir::Dirs;
-    }
+    // Always include files and directories; visibility is controlled by rebuild_filtered_indices
+    QDir::Filters filters = QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot;
     
     // Determine subfolder depth for recursion
     int max_depth = 0;
@@ -2328,19 +2333,16 @@ void StandaloneFileTinderDialog::on_sort_order_toggled() {
 
 void StandaloneFileTinderDialog::on_folders_toggle_changed(int state) {
     include_folders_ = (state == Qt::Checked);
-    // Reset counts before re-scanning and reloading state
-    keep_count_ = 0;
-    delete_count_ = 0;
-    sort_later_count_ = 0;
-    move_count_ = 0;
-    scan_files();  // Re-scan with new settings
-    apply_sort();
     rebuild_filtered_indices();
-    load_session_state();
     if (!filtered_indices_.empty()) {
         show_current_file();
+    } else {
+        if (preview_label_)
+            preview_label_->setText("<div style='text-align: center; font-size: 24px; color: #f39c12;'>"
+                                   "No files match this filter</div>");
     }
     update_progress();
+    update_stats();
 }
 
 void StandaloneFileTinderDialog::apply_sort() {
@@ -2482,10 +2484,34 @@ void StandaloneFileTinderDialog::apply_filter(FileFilterType filter) {
 void StandaloneFileTinderDialog::rebuild_filtered_indices() {
     filtered_indices_.clear();
     
+    QString search_text;
+    if (search_box_) {
+        search_text = search_box_->text().trimmed();
+    }
+    
     for (size_t i = 0; i < files_.size(); ++i) {
-        if (file_matches_filter(files_[i])) {
-            filtered_indices_.push_back(static_cast<int>(i));
-        }
+        const auto& file = files_[i];
+        
+        // Step 1: File type filter
+        if (!file_matches_filter(file)) continue;
+        
+        // Step 2: Include folders filter (if unchecked, exclude directories)
+        // FoldersOnly filter explicitly requests directories, so bypass this check
+        if (!include_folders_ && file.is_directory
+            && current_filter_ != FileFilterType::FoldersOnly) continue;
+        
+        // Step 3: Search text filter
+        if (!search_text.isEmpty()
+            && !file.name.contains(search_text, Qt::CaseInsensitive)) continue;
+        
+        filtered_indices_.push_back(static_cast<int>(i));
+    }
+    
+    // Clamp current_filtered_index_
+    if (filtered_indices_.empty()) {
+        current_filtered_index_ = 0;
+    } else if (current_filtered_index_ >= static_cast<int>(filtered_indices_.size())) {
+        current_filtered_index_ = static_cast<int>(filtered_indices_.size()) - 1;
     }
 }
 
@@ -2530,6 +2556,8 @@ bool StandaloneFileTinderDialog::file_matches_filter(const FileToProcess& file) 
         case FileFilterType::FoldersOnly:
             return file.is_directory;
         case FileFilterType::Custom: {
+            // Directories pass custom filter; include_folders controls visibility
+            if (file.is_directory) return true;
             // Match custom extensions
             if (custom_extensions_.isEmpty()) return true;
             QString ext = "." + file.extension.toLower();
@@ -2661,20 +2689,38 @@ void StandaloneFileTinderDialog::show_shortcuts_help() {
 }
 
 void StandaloneFileTinderDialog::on_search(const QString& text) {
-    if (text.isEmpty()) return;
+    Q_UNUSED(text);
     
-    int count = static_cast<int>(filtered_indices_.size());
-    if (count == 0) return;
+    // Save current file index to try to stay on it
+    int prev_file_idx = get_current_file_index();
     
-    // Search forward from the position after the current one, wrapping around
-    int start = (current_filtered_index_ + 1) % count;
-    for (int offset = 0; offset < count; ++offset) {
-        int i = (start + offset) % count;
-        const auto& file = files_[filtered_indices_[i]];
-        if (file.name.contains(text, Qt::CaseInsensitive)) {
-            current_filtered_index_ = i;
-            show_current_file();
-            return;
+    rebuild_filtered_indices();
+    
+    if (filtered_indices_.empty()) {
+        if (preview_label_)
+            preview_label_->setText("<div style='text-align: center; font-size: 18px; color: #f39c12;'>"
+                                   "No files match the search</div>");
+        if (file_info_label_)
+            file_info_label_->setText("Try a different search term.");
+        update_progress();
+        return;
+    }
+    
+    // Try to stay on the current file if it's still in the filtered list
+    bool found = false;
+    if (prev_file_idx >= 0) {
+        for (size_t i = 0; i < filtered_indices_.size(); ++i) {
+            if (filtered_indices_[i] == prev_file_idx) {
+                current_filtered_index_ = static_cast<int>(i);
+                found = true;
+                break;
+            }
         }
     }
+    if (!found) {
+        current_filtered_index_ = 0;
+    }
+    
+    show_current_file();
+    update_progress();
 }

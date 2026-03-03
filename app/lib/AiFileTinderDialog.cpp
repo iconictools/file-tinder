@@ -1,4 +1,5 @@
 #include "AiFileTinderDialog.hpp"
+#include "ManualEditDialog.hpp"
 #include "FolderTreeModel.hpp"
 #include "MindMapView.hpp"
 #include "DatabaseManager.hpp"
@@ -1280,103 +1281,21 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
             }
         }
 
-        // Let user review proposed categories before applying
+        // Let user review proposed categories using ManualEditDialog
         if (!new_folders.isEmpty()) {
-            QDialog review_dlg(this);
-            review_dlg.setWindowTitle("Review AI Categories");
-            review_dlg.setMinimumSize(ui::scaling::scaled(500), ui::scaling::scaled(400));
-            auto* rv_layout = new QVBoxLayout(&review_dlg);
-
-            auto* rv_header = new QLabel(QString("AI proposed %1 new folder(s). Edit, remove, or add categories:")
-                .arg(new_folders.size()));
-            rv_header->setStyleSheet("font-weight: bold; color: #3498db;");
-            rv_header->setWordWrap(true);
-            rv_layout->addWidget(rv_header);
-
-            auto* mode_toggle = new QPushButton("Switch to List View");
-            mode_toggle->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 8px; }");
-            rv_layout->addWidget(mode_toggle);
-
-            auto* stacked = new QStackedWidget();
-
-            auto* folder_edit = new QTextEdit();
             QStringList sorted_folders = new_folders.values();
             sorted_folders.sort();
-            folder_edit->setPlainText(sorted_folders.join("\n"));
-            folder_edit->setStyleSheet("QTextEdit { background: #1a1a2e; color: #e0e0e0; font-family: monospace; font-size: 11px; }");
-            stacked->addWidget(folder_edit);
 
-            auto* folder_list = new QListWidget();
-            folder_list->setStyleSheet("QListWidget { background: #1a1a2e; color: #e0e0e0; font-size: 11px; }");
-            folder_list->setDragDropMode(QAbstractItemView::InternalMove);
-            for (const QString& f : sorted_folders) {
-                auto* item = new QListWidgetItem(f);
-                item->setFlags(item->flags() | Qt::ItemIsEditable);
-                folder_list->addItem(item);
-            }
-            stacked->addWidget(folder_list);
-            stacked->setCurrentIndex(0);
-            rv_layout->addWidget(stacked, 1);
-
-            connect(mode_toggle, &QPushButton::clicked, [stacked, mode_toggle, folder_edit, folder_list]() {
-                if (stacked->currentIndex() == 0) {
-                    folder_list->clear();
-                    QStringList lines = folder_edit->toPlainText().split('\n', Qt::SkipEmptyParts);
-                    for (const QString& line : lines) {
-                        if (!line.trimmed().isEmpty()) {
-                            auto* item = new QListWidgetItem(line.trimmed());
-                            item->setFlags(item->flags() | Qt::ItemIsEditable);
-                            folder_list->addItem(item);
-                        }
-                    }
-                    stacked->setCurrentIndex(1);
-                    mode_toggle->setText("Switch to Text View");
-                } else {
-                    QStringList lines;
-                    for (int i = 0; i < folder_list->count(); ++i) {
-                        lines << folder_list->item(i)->text();
-                    }
-                    folder_edit->setPlainText(lines.join("\n"));
-                    stacked->setCurrentIndex(0);
-                    mode_toggle->setText("Switch to List View");
-                }
-            });
-
-            auto* rv_note = new QLabel("One folder path per line. Empty lines will be ignored.");
-            rv_note->setStyleSheet("color: #95a5a6; font-size: 10px;");
-            rv_layout->addWidget(rv_note);
-
-            auto* rv_btns = new QHBoxLayout();
-            auto* rv_cancel = new QPushButton("Cancel (use as-is)");
-            connect(rv_cancel, &QPushButton::clicked, &review_dlg, &QDialog::reject);
-            rv_btns->addWidget(rv_cancel);
-            rv_btns->addStretch();
-            auto* rv_ok = new QPushButton("Apply Changes");
-            rv_ok->setStyleSheet("QPushButton { background-color: #3498db; color: white; padding: 6px 16px; border-radius: 4px; }");
-            connect(rv_ok, &QPushButton::clicked, &review_dlg, &QDialog::accept);
-            rv_btns->addWidget(rv_ok);
-            rv_layout->addLayout(rv_btns);
+            ManualEditDialog review_dlg(source_folder_, sorted_folders, this);
+            review_dlg.setWindowTitle("Review AI Categories");
 
             if (review_dlg.exec() == QDialog::Accepted) {
                 new_folders.clear();
-                QStringList lines;
-                if (stacked->currentIndex() == 0) {
-                    lines = folder_edit->toPlainText().split('\n', Qt::SkipEmptyParts);
-                } else {
-                    for (int i = 0; i < folder_list->count(); ++i) {
-                        lines << folder_list->item(i)->text();
+                QStringList result = review_dlg.get_folders();
+                for (const QString& f : result) {
+                    if (!f.isEmpty() && f != source_folder_) {
+                        new_folders.insert(f);
                     }
-                }
-                QSet<QString> seen;
-                for (const QString& line : lines) {
-                    QString trimmed = line.trimmed();
-                    if (trimmed.isEmpty() || trimmed == source_folder_) continue;
-                    if (seen.contains(trimmed)) continue;
-                    seen.insert(trimmed);
-                    if (!trimmed.startsWith(source_folder_)) {
-                        trimmed = QDir::cleanPath(source_folder_ + "/" + trimmed);
-                    }
-                    new_folders.insert(trimmed);
                 }
             }
             log(QString("Categories after review: %1 folder(s)").arg(new_folders.size()));
