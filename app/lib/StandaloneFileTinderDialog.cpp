@@ -642,7 +642,8 @@ void StandaloneFileTinderDialog::scan_files() {
         return;
     }
     
-    // Always include files and directories; visibility is controlled by rebuild_filtered_indices
+    // Always include files and directories; directory visibility is controlled
+    // by rebuild_filtered_indices. Subfolder recursion depth is gated on include_folders_.
     QDir::Filters filters = QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot;
     
     // Determine subfolder depth for recursion

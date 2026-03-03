@@ -11,6 +11,12 @@
 #include <QDir>
 #include <QFileInfo>
 
+namespace {
+QString virtual_status(const QString& path) {
+    return QDir(path).exists() ? "no" : "yes";
+}
+} // namespace
+
 ManualEditDialog::ManualEditDialog(const QString& source_folder,
                                    const QStringList& initial_folders,
                                    QWidget* parent)
@@ -170,7 +176,7 @@ void ManualEditDialog::populate_tree(const QStringList& folders) {
             item->setText(0, parts[i]);
             QString full_path = QDir::cleanPath(source_folder_ + '/' + accumulated);
             item->setText(1, full_path);
-            item->setText(2, QDir(full_path).exists() ? "no" : "yes");
+            item->setText(2, virtual_status(full_path));
             item->setFlags(item->flags() | Qt::ItemIsEditable);
 
             if (parent_item) {
@@ -233,7 +239,7 @@ void ManualEditDialog::add_folder() {
     item->setText(0, name);
     QString full_path = QDir::cleanPath(source_folder_ + '/' + name);
     item->setText(1, full_path);
-    item->setText(2, QDir(full_path).exists() ? "no" : "yes");
+    item->setText(2, virtual_status(full_path));
     item->setFlags(item->flags() | Qt::ItemIsEditable);
     tree_->addTopLevelItem(item);
 }
@@ -254,7 +260,7 @@ void ManualEditDialog::add_subfolder() {
     QString parent_path = parent->text(1);
     QString full_path = QDir::cleanPath(parent_path + '/' + name);
     item->setText(1, full_path);
-    item->setText(2, QDir(full_path).exists() ? "no" : "yes");
+    item->setText(2, virtual_status(full_path));
     item->setFlags(item->flags() | Qt::ItemIsEditable);
     parent->addChild(item);
     parent->setExpanded(true);
