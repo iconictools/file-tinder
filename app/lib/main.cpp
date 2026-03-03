@@ -110,6 +110,55 @@ private:
     StandaloneFileTinderDialog* basic_widget_ = nullptr;
     AdvancedFileTinderDialog* advanced_widget_ = nullptr;
     AiFileTinderDialog* ai_widget_ = nullptr;
+    QSize launcher_size_;  // Saved launcher page size for restoring on return
+    
+    // Resize the window appropriately for the given mode, keeping it on screen
+    void resize_for_mode(const QString& mode) {
+        auto* screen = QApplication::primaryScreen();
+        if (!screen) return;
+        QRect avail = screen->availableGeometry();
+        int w, h;
+        if (mode == "basic") {
+            w = qMin(ui::scaling::scaled(ui::dimensions::kStandaloneFileTinderMinWidth),
+                      avail.width() * 85 / 100);
+            h = qMin(ui::scaling::scaled(ui::dimensions::kStandaloneFileTinderMinHeight),
+                      avail.height() * 75 / 100);
+        } else {
+            // Advanced and AI modes need more space
+            w = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinWidth),
+                      avail.width() * 9 / 10);
+            h = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinHeight),
+                      avail.height() * 8 / 10);
+        }
+        resize(w, h);
+        ensure_on_screen();
+    }
+    
+    // Ensure the window stays fully within the available screen area
+    void ensure_on_screen() {
+        auto* screen = QApplication::primaryScreen();
+        if (!screen) return;
+        QRect avail = screen->availableGeometry();
+        QRect geo = geometry();
+        
+        // Clamp width/height to screen
+        if (geo.width() > avail.width())
+            geo.setWidth(avail.width());
+        if (geo.height() > avail.height())
+            geo.setHeight(avail.height());
+        
+        // Keep the window within screen bounds
+        if (geo.left() < avail.left())
+            geo.moveLeft(avail.left());
+        if (geo.top() < avail.top())
+            geo.moveTop(avail.top());
+        if (geo.right() > avail.right())
+            geo.moveRight(avail.right());
+        if (geo.bottom() > avail.bottom())
+            geo.moveBottom(avail.bottom());
+        
+        setGeometry(geo);
+    }
     
     void apply_theme() {
         QPalette p;
@@ -703,6 +752,11 @@ private:
         stack_->setCurrentWidget(launcher_page_);
         setWindowTitle("File Tinder");
         check_session_state();
+        // Restore the launcher page size so the window doesn't stay enlarged
+        if (launcher_size_.isValid()) {
+            resize(launcher_size_);
+        }
+        ensure_on_screen();
     }
     
     void check_session_state() {
@@ -726,6 +780,9 @@ private:
         }
         
         LOG_INFO("Launcher", "Starting basic mode");
+        
+        // Save launcher size before resizing for mode
+        launcher_size_ = size();
         
         // Destroy old widget if source folder changed
         if (basic_widget_ && basic_widget_->source_folder() != chosen_path_) {
@@ -752,6 +809,7 @@ private:
         }
         
         stack_->setCurrentWidget(basic_widget_);
+        resize_for_mode("basic");
     }
     
     void launch_advanced() {
@@ -763,6 +821,10 @@ private:
         }
         
         LOG_INFO("Launcher", "Starting advanced mode");
+        
+        // Save launcher size before resizing for mode
+        if (stack_->currentWidget() == launcher_page_)
+            launcher_size_ = size();
         
         if (advanced_widget_ && advanced_widget_->source_folder() != chosen_path_) {
             stack_->removeWidget(advanced_widget_);
@@ -788,6 +850,7 @@ private:
         }
         
         stack_->setCurrentWidget(advanced_widget_);
+        resize_for_mode("advanced");
     }
     
     void launch_ai() {
@@ -799,6 +862,10 @@ private:
         }
         
         LOG_INFO("Launcher", "Starting AI mode");
+        
+        // Save launcher size before resizing for mode
+        if (stack_->currentWidget() == launcher_page_)
+            launcher_size_ = size();
         
         if (ai_widget_ && ai_widget_->source_folder() != chosen_path_) {
             stack_->removeWidget(ai_widget_);
@@ -824,6 +891,7 @@ private:
         }
         
         stack_->setCurrentWidget(ai_widget_);
+        resize_for_mode("ai");
     }
     
     void clear_session() {

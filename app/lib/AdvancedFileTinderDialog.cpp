@@ -53,7 +53,6 @@ AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
     , folder_model_(nullptr) {
     
     setWindowTitle(QString("Advanced Mode — %1").arg(QFileInfo(source_folder).fileName()));
-    setMinimumWidth(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinWidth));
     mode_name_ = "Advanced";
 }
 
@@ -61,14 +60,8 @@ AdvancedFileTinderDialog::~AdvancedFileTinderDialog() = default;
 
 void AdvancedFileTinderDialog::initialize() {
     StandaloneFileTinderDialog::initialize();
-    
-    // Override the base class sizing for advanced mode (needs more width)
-    if (auto* screen = QApplication::primaryScreen()) {
-        QRect avail = screen->availableGeometry();
-        int w = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinWidth), avail.width() * 9 / 10);
-        int h = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinHeight), avail.height() * 8 / 10);
-        resize(w, h);
-    }
+    // NOTE: Window sizing is managed by the parent (FileTinderLauncher)
+    // since mode widgets are pages in a QStackedWidget.
 }
 
 void AdvancedFileTinderDialog::setup_ui() {

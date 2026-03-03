@@ -132,15 +132,9 @@ void StandaloneFileTinderDialog::initialize() {
     // Start session timer for review pace tracking
     session_timer_.start();
     
-    // Size window to fit within the available screen area
-    if (auto* screen = QApplication::primaryScreen()) {
-        QRect avail = screen->availableGeometry();
-        int target_w = qMin(ui::scaling::scaled(ui::dimensions::kStandaloneFileTinderMinWidth),
-                            avail.width() * 85 / 100);
-        int target_h = qMin(ui::scaling::scaled(ui::dimensions::kStandaloneFileTinderMinHeight),
-                            avail.height() * 75 / 100);
-        resize(target_w, target_h);
-    }
+    // NOTE: Window sizing is managed by the parent (FileTinderLauncher)
+    // since mode widgets are pages in a QStackedWidget. Calling resize()
+    // here would permanently enlarge the parent window.
 }
 
 void StandaloneFileTinderDialog::save_last_folder() {
