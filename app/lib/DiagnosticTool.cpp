@@ -790,9 +790,10 @@ DiagnosticTestResult DiagnosticTool::test_keyboard_shortcuts() {
     QList<ShortcutDef> basic_shortcuts = {
         {"Basic", Qt::Key_Right, "Keep"},
         {"Basic", Qt::Key_Left, "Delete"},
-        {"Basic", Qt::Key_Down, "Skip"},
+        {"Basic", Qt::Key_Down, "Sort Later"},
         {"Basic", Qt::Key_Up, "Back"},
         {"Basic", Qt::Key_Z, "Undo"},
+        {"Basic", Qt::Key_Y, "Redo"},
         {"Basic", Qt::Key_P, "Preview"},
         {"Basic", Qt::Key_Return, "Finish"},
         {"Basic", Qt::Key_Question, "Help"}
@@ -801,11 +802,12 @@ DiagnosticTestResult DiagnosticTool::test_keyboard_shortcuts() {
     QList<ShortcutDef> advanced_shortcuts = {
         {"Advanced", Qt::Key_Left, "Delete"},
         {"Advanced", Qt::Key_D, "Delete"},
-        {"Advanced", Qt::Key_Down, "Skip"},
-        {"Advanced", Qt::Key_S, "Skip"},
+        {"Advanced", Qt::Key_Down, "Sort Later"},
+        {"Advanced", Qt::Key_S, "Sort Later"},
         {"Advanced", Qt::Key_Up, "Back"},
         {"Advanced", Qt::Key_K, "Keep"},
         {"Advanced", Qt::Key_Z, "Undo"},
+        {"Advanced", Qt::Key_Y, "Redo"},
         {"Advanced", Qt::Key_N, "Add Folder"}
     };
     

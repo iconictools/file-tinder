@@ -2,6 +2,57 @@
 
 All notable changes to File Tinder are documented in this file.
 
+## [Unreleased] — 2026-03-03
+
+### Changed — Cross-cutting Decision Model Refactor
+- **"Skip" renamed to "Sort Later"** across all modes, DB schema, UI labels, keyboard shortcuts, and filters. The "Sort Later" action now moves the file to the END of the filtered list instead of just skipping it, so users will encounter it again later.
+- **Redo functionality added**: `redo_stack_` with Y key shortcut alongside existing undo (Z). Standard undo/redo pattern — new actions clear redo stack, undo pushes to redo, redo pushes to undo.
+- **Review summary shows ALL files** including pending (displayed in gray #888), not just files with decisions.
+- **Database constraint updated**: CHECK constraint now allows `'sort_later'` instead of `'skip'`.
+- **FileListWindow context menu**: "Skip" renamed to "Sort Later", status prefix `[S]` → `[L]`.
+
+### Added — AI Mode Improvements
+- **AI glow borders**: Gold `#f1c40f` glow border on grid nodes that AI suggests for the current file. Toggle via "Glow AI" checkbox in toolbar.
+- **AI reasoning toggle**: "AI Reasoning" checkbox in toolbar controls visibility of reasoning text per file.
+- **"Re-run AI" renamed to "AI Actions"**: Clearer sub-items — "Analyze remaining files", "Re-analyze all files", "Generate new categories".
+- **Confidence threshold removed**: Redundant spinner removed from AI Setup dialog.
+- **Full path tooltips on AI suggestions**: Hovering items in the horizontal AI Suggestions panel instantly shows the full folder path.
+
+### Added — Advanced Mode Improvements
+- **3-level path display**: Replaced boolean "Full Paths" toggle with cycling button — Off (basename only) → Paths (relative) → Full Paths (full relative from source).
+- **Welcome popup removed**: Blocking QMessageBox on Advanced mode startup removed. Help accessible via ? button.
+
+### Added — Review & Execution Improvements
+- **"Close" renamed to "Consolidate"**: Button now says "Consolidate" with tooltip explaining permanence.
+- **Undo always enabled**: Removed the "Permanent" disabled state on undo buttons in execution log.
+- **Narrower undo buttons**: Fixed width 60px for better table layout.
+- **Relative destination paths**: Shows path relative to source folder, or full path if outside source.
+- **Review column widths**: Mode column narrow (60px fixed), Destination stretches to fill.
+- **Folder picker**: Browse icon beside each destination dropdown for selecting folders outside the grid.
+
+### Added — Basic Mode Improvements
+- **Extension-based file icons**: Shows actual extension `[PNG]`, `[MP4]`, `[DOCX]` instead of generic categories `[IMG]`, `[VID]`, `[DOC]`.
+- **Folders sorted first**: When "Include Folders" is enabled, directories always sort before files.
+
+### Improved — Light Theme
+- **Warmer Bootstrap-inspired palette**: Better contrast with proper disabled states, placeholder text, and link colors.
+
+### Fixed — Bug Fixes
+- **Preview zoom on filter/sort change**: Image preview no longer reloads when changing filter or sort options (path caching via `current_preview_path_`).
+- **File List window z-order**: Removed `Qt::WindowStaysOnTopHint` so window hides when clicking away from the app.
+- **Grid ghost text overlay**: Empty state label now tracked as member `empty_label_` and properly hidden when folders exist.
+- **Review pace accuracy**: Now tracks session time (dialog open to finish via `session_timer_`) instead of execution time.
+- **Execution log filter mapping**: Correctly maps "Moved"→"move", "Deleted"→"delete", "Kept"→"keep" using `startsWith`.
+- **"Session in progress" label**: Now hides correctly when clicking Clear Session.
+
+### Removed — Dead Code
+- `on_back()` and `show_folder_picker()` — unused methods in StandaloneFileTinderDialog.
+- `FolderNodeWidget` — entirely unused widget (files + CMakeLists entry).
+- 15+ unused `ui_constants.hpp` entries (kNodeWidth, kNodeHeight, kAddNode sizes, ui::icons namespace).
+- `open_diagnostics()` reference removed from launcher.
+
+---
+
 ## [Unreleased] — 2026-03-02
 
 ### Added — AI Mode Enhancements

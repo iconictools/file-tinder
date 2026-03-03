@@ -2525,7 +2525,7 @@ void StandaloneFileTinderDialog::show_shortcuts_help() {
 <tr><td>Width spinner</td><td>Adjust grid button width (80-300px)</td></tr>
 <tr class='section'><td colspan='2'>AI Mode</td></tr>
 <tr><td>AI Setup button</td><td>Configure provider, model, and sorting options</td></tr>
-<tr><td>Re-run AI button</td><td>Re-analyze unsorted or all files</td></tr>
+<tr><td>AI Actions button</td><td>Analyze remaining, re-analyze all, or generate new categories</td></tr>
 <tr><td>Semi mode</td><td>AI highlights suggested folders in grid + AI Suggestions bar</td></tr>
 <tr><td>AI Reasoning</td><td>Shows why the AI picked specific folders for the current file</td></tr>
 <tr><td>Confidence %</td><td>Color-coded certainty level on each suggestion</td></tr>
