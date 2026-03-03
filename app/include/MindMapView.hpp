@@ -91,6 +91,8 @@ private:
     bool compact_mode_ = true;  // Compact (small) vs expanded (wider) folder buttons
     int path_display_mode_ = 0;  // 0=off, 1=paths, 2=full paths
     int custom_width_ = 0;  // 0 = use compact/expanded defaults
+    bool auto_width_ = false;  // Auto-size buttons to fit text content
+    int custom_height_ = 32;  // Custom button height (24-60)
     bool row_major_ = false;  // false = column-major (top-to-bottom), true = row-major (left-to-right)
     bool show_hierarchy_ = false;  // Indent subfolders by depth
     
@@ -110,6 +112,10 @@ public:
     bool row_major() const { return row_major_; }
     void set_show_hierarchy(bool h) { show_hierarchy_ = h; build_grid(); }
     bool show_hierarchy() const { return show_hierarchy_; }
+    void set_auto_width(bool a) { auto_width_ = a; build_grid(); }
+    bool auto_width() const { return auto_width_; }
+    void set_custom_height(int h) { custom_height_ = h; build_grid(); }
+    int custom_height() const { return custom_height_; }
     void sort_alphabetically();
     void sort_by_count();
 

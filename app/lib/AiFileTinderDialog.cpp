@@ -671,7 +671,8 @@ AiFileTinderDialog::AiFileTinderDialog(const QString& source_folder,
     , rate_limit_timer_(new QTimer(this))
     , requests_this_minute_(0) {
 
-    setWindowTitle(QString("File Tinder - AI Mode \xe2\x80\x94 %1").arg(QFileInfo(source_folder).fileName()));
+    setWindowTitle(QString("AI Mode \xe2\x80\x94 %1").arg(QFileInfo(source_folder).fileName()));
+    mode_name_ = "AI";
 
     rate_limit_timer_->setInterval(60000);
     connect(rate_limit_timer_, &QTimer::timeout, this, &AiFileTinderDialog::reset_rate_limit);
@@ -1746,10 +1747,12 @@ void AiFileTinderDialog::apply_auto_suggestions() {
 
         if (dest == source_folder_) {
             file.decision = "keep";
+            file.decided_in_mode = mode_name_;
             keep_count_++;
         } else {
             file.decision = "move";
             file.destination_folder = dest;
+            file.decided_in_mode = mode_name_;
             move_count_++;
             if (folder_model_) folder_model_->assign_file_to_folder(dest);
         }
@@ -1912,6 +1915,7 @@ void AiFileTinderDialog::on_folder_clicked_from_ai(const QString& folder_path) {
 
     file.decision = "move";
     file.destination_folder = folder_path;
+    file.decided_in_mode = mode_name_;
     move_count_++;
 
     if (folder_model_) folder_model_->assign_file_to_folder(folder_path);

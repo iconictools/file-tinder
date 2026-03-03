@@ -44,8 +44,9 @@ AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
     , filter_widget_(nullptr)
     , folder_model_(nullptr) {
     
-    setWindowTitle(QString("File Tinder - Advanced Mode — %1").arg(QFileInfo(source_folder).fileName()));
+    setWindowTitle(QString("Advanced Mode — %1").arg(QFileInfo(source_folder).fileName()));
     setMinimumWidth(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinWidth));
+    mode_name_ = "Advanced";
 }
 
 AdvancedFileTinderDialog::~AdvancedFileTinderDialog() = default;
@@ -82,7 +83,7 @@ void AdvancedFileTinderDialog::setup_ui() {
     auto* title_layout = new QHBoxLayout(title_bar);
     title_layout->setContentsMargins(0, 0, 0, 0);
     
-    auto* title_label = new QLabel("File Tinder - Advanced Mode");
+    auto* title_label = new QLabel("Advanced Mode");
     title_label->setStyleSheet("font-size: 16px; font-weight: bold;");
     title_layout->addWidget(title_label);
     
@@ -206,20 +207,20 @@ void AdvancedFileTinderDialog::setup_mind_map() {
     });
     grid_toolbar->addWidget(rows_spin);
     
-    auto* compact_btn = new QPushButton("Compact");
-    compact_btn->setMaximumWidth(70);
-    compact_btn->setCheckable(true);
-    compact_btn->setChecked(true);
-    compact_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
-    compact_btn->setToolTip("Toggle compact/expanded folder buttons");
-    connect(compact_btn, &QPushButton::toggled, this, [this, compact_btn](bool checked) {
-        compact_btn->setText(checked ? "Compact" : "Expanded");
+    auto* height_label = new QLabel("Height:");
+    grid_toolbar->addWidget(height_label);
+    auto* height_spin = new QSpinBox();
+    height_spin->setRange(24, 60);
+    height_spin->setValue(32);
+    height_spin->setSingleStep(4);
+    height_spin->setMaximumWidth(55);
+    height_spin->setToolTip("Folder button height in pixels");
+    connect(height_spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
         if (mind_map_view_) {
-            mind_map_view_->set_compact_mode(checked);
-            mind_map_view_->refresh_layout();
+            mind_map_view_->set_custom_height(val);
         }
     });
-    grid_toolbar->addWidget(compact_btn);
+    grid_toolbar->addWidget(height_spin);
     
     auto* fullpath_btn = new QPushButton("Off");
     fullpath_btn->setMaximumWidth(75);
@@ -253,25 +254,31 @@ void AdvancedFileTinderDialog::setup_mind_map() {
         }
     });
     grid_toolbar->addWidget(width_spin);
-    
-    // Grid sorting buttons
-    auto* sort_az_btn = new QPushButton("A-Z");
-    sort_az_btn->setMaximumWidth(35);
-    sort_az_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 4px; }");
-    sort_az_btn->setToolTip("Sort grid folders alphabetically");
-    connect(sort_az_btn, &QPushButton::clicked, this, [this]() {
-        if (mind_map_view_) mind_map_view_->sort_alphabetically();
+
+    auto* auto_width_check = new QCheckBox("Auto Width");
+    auto_width_check->setStyleSheet("QCheckBox { font-size: 10px; }");
+    auto_width_check->setToolTip("Auto-size buttons to fit text content");
+    connect(auto_width_check, &QCheckBox::toggled, this, [this, width_spin](bool checked) {
+        width_spin->setEnabled(!checked);
+        if (mind_map_view_) {
+            mind_map_view_->set_auto_width(checked);
+        }
     });
-    grid_toolbar->addWidget(sort_az_btn);
+    grid_toolbar->addWidget(auto_width_check);
     
-    auto* sort_count_btn = new QPushButton("#");
-    sort_count_btn->setMaximumWidth(25);
-    sort_count_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 4px; }");
-    sort_count_btn->setToolTip("Sort grid folders by file count (most files first)");
-    connect(sort_count_btn, &QPushButton::clicked, this, [this]() {
-        if (mind_map_view_) mind_map_view_->sort_by_count();
+    // Grid sort dropdown
+    grid_toolbar->addWidget(new QLabel("Sort:"));
+    auto* grid_sort_combo = new QComboBox();
+    grid_sort_combo->addItems({"Manual", "A-Z", "By Count"});
+    grid_sort_combo->setMaximumWidth(90);
+    grid_sort_combo->setStyleSheet("QComboBox { font-size: 10px; }");
+    grid_sort_combo->setToolTip("Sort grid folders");
+    connect(grid_sort_combo, &QComboBox::currentTextChanged, this, [this](const QString& text) {
+        if (!mind_map_view_) return;
+        if (text == "A-Z") mind_map_view_->sort_alphabetically();
+        else if (text == "By Count") mind_map_view_->sort_by_count();
     });
-    grid_toolbar->addWidget(sort_count_btn);
+    grid_toolbar->addWidget(grid_sort_combo);
     
     // Hierarchy toggle
     auto* hierarchy_check = new QCheckBox("Hierarchy");
@@ -283,6 +290,22 @@ void AdvancedFileTinderDialog::setup_mind_map() {
         }
     });
     grid_toolbar->addWidget(hierarchy_check);
+
+    auto* expand_btn = new QPushButton("Expand");
+    expand_btn->setMaximumWidth(60);
+    expand_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
+    expand_btn->setToolTip("Toggle fullscreen view");
+    expand_btn->setCheckable(true);
+    connect(expand_btn, &QPushButton::toggled, this, [this, expand_btn](bool checked) {
+        if (checked) {
+            showFullScreen();
+            expand_btn->setText("Restore");
+        } else {
+            showNormal();
+            expand_btn->setText("Expand");
+        }
+    });
+    grid_toolbar->addWidget(expand_btn);
     
     grid_toolbar->addStretch();
     
@@ -607,6 +630,7 @@ void AdvancedFileTinderDialog::on_folder_clicked(const QString& folder_path) {
     
     file.decision = "move";
     file.destination_folder = folder_path;
+    file.decided_in_mode = mode_name_;
     move_count_++;
     
     // Record for undo (store the OLD destination so it can be restored)

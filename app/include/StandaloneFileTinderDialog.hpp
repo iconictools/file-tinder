@@ -44,6 +44,7 @@ struct FileToProcess {
     QString decision;           // "pending", "keep", "delete", "sort_later", "move"
     QString destination_folder; // For move operations
     QString mime_type;          // MIME type for filtering
+    QString decided_in_mode;    // Which mode made the decision
     bool is_directory;          // For folder support
     bool has_duplicate = false; // Cached: another file shares same name+size
 };
@@ -99,6 +100,9 @@ protected:
     // Sorting
     FileSortField sort_field_;
     SortOrder sort_order_;
+    
+    // Mode tracking
+    QString mode_name_ = "Basic";
     
     // Custom filter
     QStringList custom_extensions_;

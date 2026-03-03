@@ -85,7 +85,7 @@ StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_fol
     , size_badge_label_(nullptr)
     , search_box_(nullptr) {
     
-    setWindowTitle(QString("File Tinder - Basic Mode — %1").arg(QFileInfo(source_folder).fileName()));
+    setWindowTitle(QString("Basic Mode — %1").arg(QFileInfo(source_folder).fileName()));
     
     // Setup resize timer for debouncing preview updates
     resize_timer_ = new QTimer(this);
@@ -152,7 +152,7 @@ void StandaloneFileTinderDialog::setup_ui() {
     auto* top_layout = new QHBoxLayout(top_bar);
     top_layout->setContentsMargins(0, 0, 0, 0);
     
-    auto* title_label = new QLabel("File Tinder - Basic Mode");
+    auto* title_label = new QLabel("Basic Mode");
     title_label->setStyleSheet(QString(
         "font-size: %1px; font-weight: bold; color: %2;"
     ).arg(ui::fonts::kHeaderSize).arg(ui::colors::kMoveColor));
@@ -180,6 +180,7 @@ void StandaloneFileTinderDialog::setup_ui() {
                     auto& file = files_[fi];
                     QString old_decision = file.decision;
                     file.decision = "delete";
+                    file.decided_in_mode = mode_name_;
                     update_decision_count(old_decision, -1);
                     delete_count_++;
                     record_action(fi, old_decision, "delete");
@@ -997,6 +998,7 @@ void StandaloneFileTinderDialog::on_keep() {
         }
         
         file.decision = "keep";
+        file.decided_in_mode = mode_name_;
         keep_count_++;
         
         // Record for undo
@@ -1031,6 +1033,7 @@ void StandaloneFileTinderDialog::on_delete() {
         }
         
         file.decision = "delete";
+        file.decided_in_mode = mode_name_;
         delete_count_++;
         
         // Record for undo
@@ -1065,6 +1068,7 @@ void StandaloneFileTinderDialog::on_sort_later() {
         }
         
         file.decision = "sort_later";
+        file.decided_in_mode = mode_name_;
         sort_later_count_++;
         
         // Record for undo
@@ -1415,11 +1419,6 @@ void StandaloneFileTinderDialog::show_review_summary() {
     review_filter_layout->addStretch();
     layout->addLayout(review_filter_layout);
     
-    // Determine mode name for this dialog
-    QString mode_name = "Basic";
-    if (windowTitle().contains("AI Mode")) mode_name = "AI";
-    else if (windowTitle().contains("Advanced")) mode_name = "Advanced";
-    
     // Performance note for large file sets
     if (files_.size() > 500) {
         auto* perf_note = new QLabel(QString("Loading %1 files...").arg(files_.size()));
@@ -1528,11 +1527,14 @@ void StandaloneFileTinderDialog::show_review_summary() {
         dest_layout->addWidget(folder_pick_btn);
         table->setCellWidget(visible_row, 3, dest_widget);
         
-        // Mode column: moves with destinations from Advanced/AI modes; others from current mode
-        QString mode_for_row = mode_name;
-        if (file.decision == "move" && !file.destination_folder.isEmpty()
-            && mode_name == "Basic") {
-            mode_for_row = "Advanced";
+        // Mode column: use decided_in_mode if set, otherwise show pending indicator
+        QString mode_for_row;
+        if (file.decision == "pending") {
+            mode_for_row = QString::fromUtf8("\xe2\x80\x94");  // em-dash
+        } else if (!file.decided_in_mode.isEmpty()) {
+            mode_for_row = file.decided_in_mode;
+        } else {
+            mode_for_row = mode_name_;
         }
         auto* mode_item = new QTableWidgetItem(mode_for_row);
         mode_item->setFlags(mode_item->flags() & ~Qt::ItemIsEditable);

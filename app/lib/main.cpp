@@ -168,7 +168,7 @@ private:
         root_layout->addSpacing(15);
         
         // Folder picker section
-        auto* picker_label = new QLabel("Choose folder to organize:");
+        auto* picker_label = new QLabel("Select Folder to Organize");
         picker_label->setStyleSheet("font-weight: bold; font-size: 12px;");
         root_layout->addWidget(picker_label);
         
@@ -194,7 +194,7 @@ private:
         // Recent folders list (middle-click to remove)
         QStringList recent = db_manager_.get_recent_folders(5);
         if (!recent.isEmpty()) {
-            auto* recent_label = new QLabel("Recent folders (click to select, middle-click to remove):");
+            auto* recent_label = new QLabel("Recent Folders (click to select, middle-click to remove):");
             recent_label->setStyleSheet("color: #888888; font-size: 10px;");
             root_layout->addWidget(recent_label);
             
@@ -244,7 +244,7 @@ private:
         root_layout->addWidget(resume_label_);
         
         // Mode buttons
-        auto* modes_label = new QLabel("Choose mode:");
+        auto* modes_label = new QLabel("Sorting Mode");
         modes_label->setStyleSheet("font-weight: bold; font-size: 12px;");
         root_layout->addWidget(modes_label);
         
@@ -331,7 +331,7 @@ private:
         root_layout->addLayout(tools_row);
         
         // Hotkey hint
-        auto* hint_text = new QLabel("Keys: Left=Delete | Down=Skip | Z=Undo | F=File List | Basic: Right=Keep | Advanced/AI: K=Keep, 1-0=Quick Access, Tab=Grid Nav");
+        auto* hint_text = new QLabel("Keys: Left=Delete | Down=Sort Later | Z=Undo | F=File List | Basic: Right=Keep | Advanced/AI: K=Keep, 1-0=Quick Access, Tab=Grid Nav");
         hint_text->setStyleSheet("color: #666666; font-size: 10px; padding-top: 8px;");
         hint_text->setAlignment(Qt::AlignCenter);
         hint_text->setWordWrap(true);

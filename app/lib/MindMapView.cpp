@@ -9,6 +9,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileInfo>
+#include <QFontMetrics>
 #include <QLabel>
 
 // === FolderButton Implementation ===
@@ -282,7 +283,7 @@ void MindMapView::build_grid() {
     // Button dimensions based on display mode
     int btn_w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_)
                                    : (compact_mode_ ? ui::scaling::scaled(120) : ui::scaling::scaled(180));
-    int btn_h = compact_mode_ ? ui::scaling::scaled(32) : ui::scaling::scaled(36);
+    int btn_h = ui::scaling::scaled(custom_height_);
     int font_size = compact_mode_ ? 11 : 12;
     
     // Root folder in column 0, spanning all rows that children will use
@@ -338,18 +339,21 @@ void MindMapView::place_folder_node(FolderNode* node) {
         if (depth < 0) depth = 0;
         left_margin = depth * 20;
     }
-    if (compact_mode_) {
+    int btn_h = ui::scaling::scaled(custom_height_);
+    if (auto_width_) {
+        QFontMetrics fm(btn->font());
+        int text_w = fm.horizontalAdvance(btn->text()) + 24;
+        text_w = qBound(80, text_w, 300);
+        btn->setFixedSize(ui::scaling::scaled(text_w) + left_margin, btn_h);
+    } else if (compact_mode_) {
         int w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_) : ui::scaling::scaled(120);
-        btn->setFixedSize(w + left_margin, ui::scaling::scaled(32));
-        if (left_margin > 0) {
-            btn->setContentsMargins(left_margin, 0, 0, 0);
-        }
+        btn->setFixedSize(w + left_margin, btn_h);
     } else {
         int w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_) : ui::scaling::scaled(180);
-        btn->setFixedSize(w + left_margin, ui::scaling::scaled(36));
-        if (left_margin > 0) {
-            btn->setContentsMargins(left_margin, 0, 0, 0);
-        }
+        btn->setFixedSize(w + left_margin, btn_h);
+    }
+    if (left_margin > 0) {
+        btn->setContentsMargins(left_margin, 0, 0, 0);
     }
     
     buttons_[node->path] = btn;

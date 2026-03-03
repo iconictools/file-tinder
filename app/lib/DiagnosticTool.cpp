@@ -858,8 +858,8 @@ DiagnosticTestResult DiagnosticTool::test_basic_mode_ui() {
     }
     
     QStringList required_buttons = {
-        "DELETE\n[Left]", "KEEP\n[Right]", "Back [Up]", "Skip [Down]",
-        "Undo [Z]", "Preview [P]", "Finish Review", "Advanced Mode", "?"
+        "DELETE\n[Left]", "KEEP\n[Right]", "Sort Later",
+        "Undo [Z]", "Preview [P]", "Finish Review", "Switch Mode", "?"
     };
     
     for (const QString& req : required_buttons) {
@@ -956,9 +956,9 @@ DiagnosticTestResult DiagnosticTool::test_advanced_mode_ui() {
     }
     
     QStringList required = {
-        "Delete [<-]", "Keep [K]", "Skip [Down]", "Back [Up]",
-        "Undo [Z]", "Finish & Execute", "Cancel", "Basic Mode",
-        "+ Add Folder"
+        "Delete", "Keep [K]", "Sort Later",
+        "Undo [Z]", "Finish & Execute", "Cancel", "Switch Mode",
+        "+"
     };
     
     for (const QString& req : required) {
