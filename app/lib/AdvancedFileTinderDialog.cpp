@@ -402,7 +402,7 @@ void AdvancedFileTinderDialog::setup_mind_map() {
                 move_count_++;
                 if (folder_model_) folder_model_->assign_file_to_folder(folder_path);
                 record_action(fi, old_decision, "move", folder_path);
-                db_.save_file_decision(source_folder_, file.path, "move", folder_path);
+                db_.save_file_decision(source_folder_, file.path, "move", folder_path, file.decided_in_mode);
             }
         }
         update_progress();
@@ -1198,7 +1198,7 @@ bool AdvancedFileTinderDialog::eventFilter(QObject* obj, QEvent* event) {
                         file.decided_in_mode = mode_name_;
                         update_decision_count(decision, 1);
                         record_action(fi, old_decision, decision);
-                        db_.save_file_decision(source_folder_, file.path, decision, file.destination_folder);
+                        db_.save_file_decision(source_folder_, file.path, decision, file.destination_folder, file.decided_in_mode);
                     }
                 }
                 update_progress();

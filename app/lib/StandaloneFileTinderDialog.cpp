@@ -737,6 +737,7 @@ void StandaloneFileTinderDialog::load_session_state() {
             if (file.path == decision.file_path) {
                 file.decision = decision.decision;
                 file.destination_folder = decision.destination_folder;
+                file.decided_in_mode = decision.decided_in_mode;
                 
                 if (decision.decision == "keep") keep_count_++;
                 else if (decision.decision == "delete") delete_count_++;
@@ -765,7 +766,7 @@ void StandaloneFileTinderDialog::load_session_state() {
 void StandaloneFileTinderDialog::save_session_state() {
     for (const auto& file : files_) {
         if (file.decision != "pending") {
-            db_.save_file_decision(source_folder_, file.path, file.decision, file.destination_folder);
+            db_.save_file_decision(source_folder_, file.path, file.decision, file.destination_folder, file.decided_in_mode);
         }
     }
 }
@@ -1005,7 +1006,7 @@ void StandaloneFileTinderDialog::record_action(int file_index, const QString& ol
     // Save the NEW decision to DB immediately (crash safety)
     if (file_index >= 0 && file_index < static_cast<int>(files_.size())) {
         const auto& file = files_[file_index];
-        db_.save_file_decision(source_folder_, file.path, file.decision, file.destination_folder);
+        db_.save_file_decision(source_folder_, file.path, file.decision, file.destination_folder, file.decided_in_mode);
     }
 }
 
@@ -1166,7 +1167,8 @@ void StandaloneFileTinderDialog::on_undo() {
         
         // Save restored decision to DB immediately
         db_.save_file_decision(source_folder_, file.path, 
-                              last_action.previous_decision, last_action.destination_folder);
+                              last_action.previous_decision, last_action.destination_folder,
+                              file.decided_in_mode);
         
         // Increment count for the restored decision (if not pending)
         if (last_action.previous_decision != "pending") {
@@ -1225,7 +1227,7 @@ void StandaloneFileTinderDialog::on_redo() {
         update_decision_count(action.new_decision, 1);
         
         // Save to DB
-        db_.save_file_decision(source_folder_, file.path, file.decision, file.destination_folder);
+        db_.save_file_decision(source_folder_, file.path, file.decision, file.destination_folder, file.decided_in_mode);
         
         // Push back onto undo stack
         undo_stack_.push_back(action);
@@ -2262,7 +2264,7 @@ bool StandaloneFileTinderDialog::eventFilter(QObject* obj, QEvent* event) {
                         file.decided_in_mode = mode_name_;
                         update_decision_count(decision, 1);
                         record_action(fi, old_decision, decision);
-                        db_.save_file_decision(source_folder_, file.path, decision, file.destination_folder);
+                        db_.save_file_decision(source_folder_, file.path, decision, file.destination_folder, file.decided_in_mode);
                     }
                 }
                 update_progress();

@@ -10,8 +10,9 @@
 
 struct FileDecision {
     QString file_path;
-    QString decision;  // "keep", "delete", "sort_later", "move"
+    QString decision;  // "keep", "delete", "sort_later", "move", "copy"
     QString destination_folder;
+    QString decided_in_mode;
     qint64 timestamp;
 };
 
@@ -39,7 +40,8 @@ public:
     
     // File Tinder state management
     bool save_file_decision(const QString& session_folder, const QString& file_path, 
-                           const QString& decision, const QString& destination = "");
+                           const QString& decision, const QString& destination = "",
+                           const QString& decided_in_mode = QString());
     std::vector<FileDecision> get_session_decisions(const QString& session_folder);
     bool clear_session(const QString& session_folder);
     FileDecision get_file_decision(const QString& session_folder, const QString& file_path);
@@ -65,6 +67,10 @@ public:
     // Quick access folders (manual, limited to 10)
     bool save_quick_access_folders(const QString& session_folder, const QStringList& folders);
     QStringList get_quick_access_folders(const QString& session_folder);
+    
+    // Session source folders (multi-folder persistence)
+    bool save_source_folders(const QString& session_folder, const QStringList& folders);
+    QStringList get_source_folders(const QString& session_folder);
     
     // Execution log (for undo support)
     bool save_execution_log(const QString& session_folder, const QString& action,

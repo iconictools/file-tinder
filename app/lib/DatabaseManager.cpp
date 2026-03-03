@@ -48,8 +48,9 @@ bool DatabaseManager::create_tables() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             folder_path TEXT NOT NULL,
             file_path TEXT NOT NULL,
-            decision TEXT NOT NULL CHECK (decision IN ('pending', 'keep', 'delete', 'sort_later', 'move')),
+            decision TEXT NOT NULL,
             destination_folder TEXT,
+            decided_in_mode TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(folder_path, file_path)
         )
@@ -120,6 +121,23 @@ bool DatabaseManager::create_tables() {
         }
     }
     
+    // Migration: add decided_in_mode column if it doesn't exist (for existing DBs)
+    {
+        QSqlQuery q(db_);
+        q.exec("ALTER TABLE file_tinder_state ADD COLUMN decided_in_mode TEXT");
+        // Ignore error -- column may already exist
+    }
+    
+    // Session source folders table (multi-folder persistence)
+    execute_query(R"(
+        CREATE TABLE IF NOT EXISTS session_source_folders (
+            session_folder TEXT NOT NULL,
+            source_path TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            UNIQUE(session_folder, source_path)
+        )
+    )");
+    
     return true;
 }
 
@@ -134,17 +152,19 @@ bool DatabaseManager::execute_query(const QString& query) {
 }
 
 bool DatabaseManager::save_file_decision(const QString& session_folder, const QString& file_path,
-                                         const QString& decision, const QString& destination) {
+                                         const QString& decision, const QString& destination,
+                                         const QString& decided_in_mode) {
     QSqlQuery query(db_);
     query.prepare(R"(
         INSERT OR REPLACE INTO file_tinder_state 
-        (folder_path, file_path, decision, destination_folder, timestamp)
-        VALUES (?, ?, ?, ?, datetime('now'))
+        (folder_path, file_path, decision, destination_folder, decided_in_mode, timestamp)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
     )");
     query.addBindValue(session_folder);
     query.addBindValue(file_path);
     query.addBindValue(decision);
     query.addBindValue(destination);
+    query.addBindValue(decided_in_mode);
     
     if (!query.exec()) {
         qWarning() << "Failed to save file decision:" << query.lastError().text();
@@ -158,7 +178,7 @@ std::vector<FileDecision> DatabaseManager::get_session_decisions(const QString& 
     
     QSqlQuery query(db_);
     query.prepare(R"(
-        SELECT file_path, decision, destination_folder, timestamp
+        SELECT file_path, decision, destination_folder, timestamp, decided_in_mode
         FROM file_tinder_state
         WHERE folder_path = ?
         ORDER BY timestamp
@@ -172,6 +192,7 @@ std::vector<FileDecision> DatabaseManager::get_session_decisions(const QString& 
             fd.decision = query.value(1).toString();
             fd.destination_folder = query.value(2).toString();
             fd.timestamp = query.value(3).toLongLong();
+            fd.decided_in_mode = query.value(4).toString();
             decisions.push_back(fd);
         }
     }
@@ -192,7 +213,7 @@ FileDecision DatabaseManager::get_file_decision(const QString& session_folder, c
     
     QSqlQuery query(db_);
     query.prepare(R"(
-        SELECT decision, destination_folder, timestamp
+        SELECT decision, destination_folder, timestamp, decided_in_mode
         FROM file_tinder_state
         WHERE folder_path = ? AND file_path = ?
     )");
@@ -204,6 +225,7 @@ FileDecision DatabaseManager::get_file_decision(const QString& session_folder, c
         fd.decision = query.value(0).toString();
         fd.destination_folder = query.value(1).toString();
         fd.timestamp = query.value(2).toLongLong();
+        fd.decided_in_mode = query.value(3).toString();
     }
     
     return fd;
@@ -422,6 +444,47 @@ QStringList DatabaseManager::get_quick_access_folders(const QString& session_fol
     
     QSqlQuery query(db_);
     query.prepare("SELECT folder_path FROM quick_access_folders WHERE session_folder = ? ORDER BY slot_order");
+    query.addBindValue(session_folder);
+    
+    if (query.exec()) {
+        while (query.next()) {
+            folders.append(query.value(0).toString());
+        }
+    }
+    
+    return folders;
+}
+
+bool DatabaseManager::save_source_folders(const QString& session_folder, const QStringList& folders) {
+    // Clear existing entries for this session
+    QSqlQuery clear_query(db_);
+    clear_query.prepare("DELETE FROM session_source_folders WHERE session_folder = ?");
+    clear_query.addBindValue(session_folder);
+    clear_query.exec();
+    
+    // Insert new entries
+    for (int i = 0; i < folders.size(); ++i) {
+        QSqlQuery insert_query(db_);
+        insert_query.prepare(R"(
+            INSERT INTO session_source_folders (session_folder, source_path, sort_order)
+            VALUES (?, ?, ?)
+        )");
+        insert_query.addBindValue(session_folder);
+        insert_query.addBindValue(folders[i]);
+        insert_query.addBindValue(i);
+        if (!insert_query.exec()) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+QStringList DatabaseManager::get_source_folders(const QString& session_folder) {
+    QStringList folders;
+    
+    QSqlQuery query(db_);
+    query.prepare("SELECT source_path FROM session_source_folders WHERE session_folder = ? ORDER BY sort_order");
     query.addBindValue(session_folder);
     
     if (query.exec()) {

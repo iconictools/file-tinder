@@ -69,6 +69,13 @@ public:
         if (!last_folder.isEmpty() && QDir(last_folder).exists()) {
             chosen_path_ = last_folder;
             source_folders_ = {last_folder};
+            
+            // Restore additional source folders from DB
+            QStringList saved_folders = db_manager_.get_source_folders(last_folder);
+            if (!saved_folders.isEmpty()) {
+                source_folders_ = saved_folders;
+            }
+            
             path_indicator_->setText(last_folder);
             path_indicator_->setStyleSheet(
                 "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
@@ -657,6 +664,9 @@ private:
             QMessageBox::information(this, "Empty Folder", "The selected folders have no files to sort.");
             return false;
         }
+        
+        // Persist source folders for session resume
+        db_manager_.save_source_folders(chosen_path_, source_folders_);
         
         return true;
     }
