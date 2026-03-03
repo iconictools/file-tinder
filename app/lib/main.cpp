@@ -612,6 +612,7 @@ private:
         
         if (reply == QMessageBox::Yes) {
             db_manager_.clear_session(chosen_path_);
+            if (resume_label_) resume_label_->setVisible(false);
             LOG_INFO("Launcher", QString("Session cleared for: %1").arg(chosen_path_));
             QMessageBox::information(this, "Session Cleared", "Saved progress has been cleared.");
         }
