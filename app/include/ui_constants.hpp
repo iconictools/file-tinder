@@ -38,31 +38,15 @@ namespace ui::dimensions {
     constexpr int kFolderTreePanelMinWidth = 350;
     constexpr int kFolderTreePanelMaxWidth = 600;
     
-    // Quick Access Bar
-    constexpr int kQuickAccessBarHeight = 50;
-    constexpr int kQuickAccessButtonWidth = 100;
-    
-    // Mind Map Node sizes (larger, clickable, sleek)
-    constexpr int kNodeWidth = 250;   // 2x larger as requested
-    constexpr int kNodeHeight = 60;   // Larger for easier clicking
-    constexpr int kNodeSpacingHorizontal = 50;
-    constexpr int kNodeSpacingVertical = 25;
+    // Mind Map Node sizes
+    constexpr int kNodeWidth = 250;
+    constexpr int kNodeHeight = 60;
     constexpr int kNodeBorderRadius = 4;
     
-    // Add node ("+" button) size
-    constexpr int kAddNodeWidth = 60;
-    constexpr int kAddNodeHeight = 60;
-    
-    // File preview
-    constexpr int kPreviewMaxWidth = 500;
-    constexpr int kPreviewMaxHeight = 400;
-    
-    // Main action buttons (2x larger for Keep/Delete)
+    // Main action buttons
     constexpr int kMainButtonWidth = 200;
     constexpr int kMainButtonHeight = 70;
-    constexpr int kSecondaryButtonWidth = 100;
-    constexpr int kSecondaryButtonHeight = 50;
-    constexpr int kThinButtonHeight = 40;  // For Back/Skip below
+    constexpr int kThinButtonHeight = 40;
 }
 
 namespace ui::colors {
@@ -71,31 +55,15 @@ namespace ui::colors {
     constexpr const char* kNodeVirtualBg = "#fff8e1";
     constexpr const char* kNodeConnectedBg = "#e8f4fc";
     constexpr const char* kNodeBorder = "#cccccc";
-    constexpr const char* kNodeSelectedBorder = "#0078d4";
-    constexpr const char* kConnectionLine = "#0078d4";
     constexpr const char* kDeleteColor = "#e74c3c";
     constexpr const char* kKeepColor = "#2ecc71";
     constexpr const char* kSkipColor = "#f39c12";
     constexpr const char* kMoveColor = "#3498db";
-    constexpr const char* kAddNodeBg = "#27ae60";
-    constexpr const char* kAddNodeHover = "#2ecc71";
-}
-
-namespace ui::icons {
-    constexpr const char* kFolderExisting = ":/icons/folder.svg";
-    constexpr const char* kFolderVirtual = ":/icons/folder-new.svg";
-    constexpr const char* kFolderConnected = ":/icons/folder-linked.svg";
-    constexpr const char* kConnectionLine = ":/icons/link.svg";
-    constexpr const char* kDelete = ":/icons/delete.svg";
-    constexpr const char* kKeep = ":/icons/keep.svg";
-    constexpr const char* kSkip = ":/icons/skip.svg";
-    constexpr const char* kBack = ":/icons/back.svg";
 }
 
 namespace ui::fonts {
     constexpr int kNodeTitleSize = 14;
     constexpr int kNodeSubtitleSize = 10;
-    constexpr int kButtonSize = 12;
     constexpr int kHeaderSize = 18;
 }
 

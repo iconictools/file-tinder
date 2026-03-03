@@ -28,7 +28,6 @@
 #include "AiFileTinderDialog.hpp"
 #include "FileTinderExecutor.hpp"
 #include "AppLogger.hpp"
-#include "DiagnosticTool.hpp"
 #include "ui_constants.hpp"
 
 class FileTinderLauncher : public QDialog {
@@ -592,12 +591,6 @@ private:
         dlg->initialize();
         dlg->exec();
         dlg->deleteLater();
-    }
-    
-    void open_diagnostics() {
-        LOG_INFO("Launcher", "Opening diagnostic tool");
-        DiagnosticTool diag(db_manager_, this);
-        diag.exec();
     }
     
     void clear_session() {

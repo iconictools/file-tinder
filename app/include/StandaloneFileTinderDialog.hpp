@@ -186,7 +186,6 @@ protected:
     virtual void on_keep();
     virtual void on_delete();
     virtual void on_skip();
-    virtual void on_back();
     virtual void on_search(const QString& text);
     virtual void on_undo();           // Undo last action
     virtual void on_show_preview();   // Open image in separate window
@@ -199,9 +198,6 @@ protected:
     // Helper to update decision counts (deduplication)
     void update_decision_count(const QString& old_decision, int delta);
     int get_current_file_index() const;  // Get actual file index from filtered index
-    
-    // Folder picker
-    QString show_folder_picker();
     
     // Review screen
     void show_review_summary();

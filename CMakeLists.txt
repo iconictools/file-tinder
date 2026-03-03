@@ -18,7 +18,6 @@ set(SOURCES
     app/lib/AdvancedFileTinderDialog.cpp
     app/lib/FolderTreeModel.cpp
     app/lib/FileTinderExecutor.cpp
-    app/lib/FolderNodeWidget.cpp
     app/lib/MindMapView.cpp
     app/lib/AppLogger.cpp
     app/lib/DiagnosticTool.cpp
@@ -36,7 +35,6 @@ set(HEADERS
     app/include/AdvancedFileTinderDialog.hpp
     app/include/FolderTreeModel.hpp
     app/include/FileTinderExecutor.hpp
-    app/include/FolderNodeWidget.hpp
     app/include/MindMapView.hpp
     app/include/ui_constants.hpp
     app/include/AppLogger.hpp

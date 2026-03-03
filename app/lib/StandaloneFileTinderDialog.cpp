@@ -1030,16 +1030,6 @@ void StandaloneFileTinderDialog::on_skip() {
     }
 }
 
-void StandaloneFileTinderDialog::on_back() {
-    try {
-        LOG_DEBUG("BasicMode", "Going back to previous file");
-        animate_swipe(false);
-        go_to_previous();
-    } catch (const std::exception& ex) {
-        LOG_ERROR("BasicMode", QString("Error in on_back: %1").arg(ex.what()));
-    }
-}
-
 void StandaloneFileTinderDialog::on_undo() {
     try {
         if (undo_stack_.empty()) {
@@ -1204,78 +1194,6 @@ void StandaloneFileTinderDialog::go_to_previous() {
         show_current_file();
         return;
     }
-}
-
-QString StandaloneFileTinderDialog::show_folder_picker() {
-    // Show dialog with recent folders and browse option
-    QDialog dialog(this);
-    dialog.setWindowTitle("Select Destination Folder");
-    dialog.setMinimumSize(ui::scaling::scaled(400), ui::scaling::scaled(300));
-    
-    auto* layout = new QVBoxLayout(&dialog);
-    
-    // Recent folders
-    auto* recent_label = new QLabel("Recent Folders:");
-    recent_label->setStyleSheet("font-weight: bold;");
-    layout->addWidget(recent_label);
-    
-    auto* recent_list = new QListWidget();
-    QStringList recent = db_.get_recent_folders(10);
-    for (const QString& folder : recent) {
-        recent_list->addItem(folder);
-    }
-    layout->addWidget(recent_list);
-    
-    QString selected_folder;
-    
-    // Buttons
-    auto* btn_layout = new QHBoxLayout();
-    
-    auto* new_folder_btn = new QPushButton("Create New Folder...");
-    connect(new_folder_btn, &QPushButton::clicked, &dialog, [&]() {
-        bool ok;
-        QString name = QInputDialog::getText(&dialog, "New Folder", 
-                                             "Enter folder name:", QLineEdit::Normal, "", &ok);
-        if (ok && !name.isEmpty()) {
-            QString parent = QFileDialog::getExistingDirectory(&dialog, "Select Parent Directory", 
-                                                              source_folder_);
-            if (!parent.isEmpty()) {
-                selected_folder = parent + "/" + name;
-                QDir().mkpath(selected_folder);
-                dialog.accept();
-            }
-        }
-    });
-    btn_layout->addWidget(new_folder_btn);
-    
-    auto* browse_btn = new QPushButton("Browse...");
-    connect(browse_btn, &QPushButton::clicked, &dialog, [&]() {
-        QString folder = QFileDialog::getExistingDirectory(&dialog, "Select Destination Folder", 
-                                                          source_folder_);
-        if (!folder.isEmpty()) {
-            selected_folder = folder;
-            dialog.accept();
-        }
-    });
-    btn_layout->addWidget(browse_btn);
-    
-    auto* cancel_btn = new QPushButton("Cancel");
-    connect(cancel_btn, &QPushButton::clicked, &dialog, &QDialog::reject);
-    btn_layout->addWidget(cancel_btn);
-    
-    layout->addLayout(btn_layout);
-    
-    // Double-click on recent
-    connect(recent_list, &QListWidget::itemDoubleClicked, &dialog, [&](QListWidgetItem* item) {
-        selected_folder = item->text();
-        dialog.accept();
-    });
-    
-    if (dialog.exec() == QDialog::Accepted) {
-        return selected_folder;
-    }
-    
-    return QString();
 }
 
 void StandaloneFileTinderDialog::show_review_summary() {
