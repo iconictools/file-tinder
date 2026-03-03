@@ -36,8 +36,9 @@
 
 AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
                                                    DatabaseManager& db,
-                                                   QWidget* parent)
-    : StandaloneFileTinderDialog(source_folder, db, parent)
+                                                   QWidget* parent,
+                                                   const QStringList& additional_sources)
+    : StandaloneFileTinderDialog(source_folder, db, parent, additional_sources)
     , scroll_area_(nullptr)
     , main_content_(nullptr)
     , mind_map_view_(nullptr)

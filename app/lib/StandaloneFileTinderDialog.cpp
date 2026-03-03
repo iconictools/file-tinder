@@ -48,7 +48,8 @@
 
 StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_folder,
                                                        DatabaseManager& db,
-                                                       QWidget* parent)
+                                                       QWidget* parent,
+                                                       const QStringList& additional_sources)
     : QDialog(parent)
     , current_filtered_index_(0)
     , source_folder_(source_folder)
@@ -88,6 +89,12 @@ StandaloneFileTinderDialog::StandaloneFileTinderDialog(const QString& source_fol
     , file_position_label_(nullptr)
     , size_badge_label_(nullptr)
     , search_box_(nullptr) {
+    
+    // Build source folders list: primary source first, then additional sources
+    source_folders_ = additional_sources;
+    if (!source_folders_.contains(source_folder)) {
+        source_folders_.prepend(source_folder);
+    }
     
     setWindowTitle(QString("Basic Mode — %1").arg(QFileInfo(source_folder).fileName()));
     
@@ -635,13 +642,6 @@ void StandaloneFileTinderDialog::scan_files() {
     files_.clear();
     QMimeDatabase mime_db;
     
-    QDir dir(source_folder_);
-    if (!dir.exists()) {
-        LOG_ERROR("BasicMode", QString("Source folder does not exist: %1").arg(source_folder_));
-        QMessageBox::warning(this, "Error", "Source folder does not exist.");
-        return;
-    }
-    
     // Always include files and directories; directory visibility is controlled
     // by rebuild_filtered_indices. Subfolder recursion depth is gated on include_folders_.
     QDir::Filters filters = QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot;
@@ -683,7 +683,15 @@ void StandaloneFileTinderDialog::scan_files() {
         }
     };
 
-    scan_dir(dir, 0);
+    // Scan all source folders
+    for (const QString& src_dir : source_folders_) {
+        QDir dir(src_dir);
+        if (!dir.exists()) {
+            LOG_ERROR("BasicMode", QString("Source folder does not exist: %1").arg(src_dir));
+            continue;
+        }
+        scan_dir(dir, 0);
+    }
     
     // Show progress for large directories (>200 files)
     const bool show_progress = files_.size() > 200;
@@ -699,7 +707,7 @@ void StandaloneFileTinderDialog::scan_files() {
     
     delete progress;
     
-    LOG_INFO("BasicMode", QString("Scanned %1 files from %2").arg(files_.size()).arg(source_folder_));
+    LOG_INFO("BasicMode", QString("Scanned %1 files from %2 folder(s)").arg(files_.size()).arg(source_folders_.size()));
     
     // Build duplicate detection cache (name+size → count)
     QHash<QPair<QString, qint64>, int> dup_map;

@@ -83,7 +83,8 @@ class StandaloneFileTinderDialog : public QDialog {
 public:
     explicit StandaloneFileTinderDialog(const QString& source_folder,
                                          DatabaseManager& db,
-                                         QWidget* parent = nullptr);
+                                         QWidget* parent = nullptr,
+                                         const QStringList& additional_sources = {});
     ~StandaloneFileTinderDialog() override;
     
     // Initialize the dialog - must be called after construction
@@ -96,6 +97,7 @@ protected:
     std::vector<int> filtered_indices_;  // Indices into files_ after filtering
     int current_filtered_index_;         // Current position in filtered list
     QString source_folder_;
+    QStringList source_folders_;  // All source folders (including source_folder_)
     DatabaseManager& db_;
     FileFilterType current_filter_;
     

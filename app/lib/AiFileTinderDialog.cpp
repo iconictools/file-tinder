@@ -662,8 +662,9 @@ int AiSetupDialog::category_limit() const {
 
 AiFileTinderDialog::AiFileTinderDialog(const QString& source_folder,
                                        DatabaseManager& db,
-                                       QWidget* parent)
-    : AdvancedFileTinderDialog(source_folder, db, parent)
+                                       QWidget* parent,
+                                       const QStringList& additional_sources)
+    : AdvancedFileTinderDialog(source_folder, db, parent, additional_sources)
     , sort_mode_(AiSortMode::Auto)
     , category_mode_(AiCategoryMode::KeepExisting)
     , semi_count_(3)

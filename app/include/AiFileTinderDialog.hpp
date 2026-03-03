@@ -108,7 +108,8 @@ class AiFileTinderDialog : public AdvancedFileTinderDialog {
 public:
     explicit AiFileTinderDialog(const QString& source_folder,
                                 DatabaseManager& db,
-                                QWidget* parent = nullptr);
+                                QWidget* parent = nullptr,
+                                const QStringList& additional_sources = {});
     ~AiFileTinderDialog() override;
 
     void initialize() override;

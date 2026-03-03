@@ -68,6 +68,7 @@ public:
         QString last_folder = settings.value("lastFolder").toString();
         if (!last_folder.isEmpty() && QDir(last_folder).exists()) {
             chosen_path_ = last_folder;
+            source_folders_ = {last_folder};
             path_indicator_->setText(last_folder);
             path_indicator_->setStyleSheet(
                 "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
@@ -86,8 +87,12 @@ public:
 private:
     DatabaseManager db_manager_;
     QString chosen_path_;
+    QStringList source_folders_;
     QLabel* path_indicator_;
     QListWidget* recent_list_ = nullptr;
+    QListWidget* multi_folder_list_ = nullptr;
+    QCheckBox* multi_folder_check_ = nullptr;
+    QPushButton* add_folder_btn_ = nullptr;
     QLabel* resume_label_ = nullptr;
     bool skip_stats_on_next_launch_ = false;  // Skip stats dashboard on mode switch
     bool is_dark_theme_ = true;
@@ -192,6 +197,76 @@ private:
         
         root_layout->addLayout(picker_row);
         
+        // Multiple folders checkbox
+        multi_folder_check_ = new QCheckBox("Multiple Folders");
+        multi_folder_check_->setStyleSheet("color: #aaaaaa; font-size: 11px;");
+        multi_folder_check_->setToolTip("Enable to scan files from multiple source folders");
+        root_layout->addWidget(multi_folder_check_);
+        
+        // Multi-folder list (hidden by default)
+        multi_folder_list_ = new QListWidget();
+        multi_folder_list_->setMaximumHeight(ui::scaling::scaled(80));
+        multi_folder_list_->setStyleSheet(
+            "QListWidget { background-color: #2d2d2d; border: 1px solid #404040; color: #aaaaaa; }"
+            "QListWidget::item { padding: 3px 8px; }"
+            "QListWidget::item:hover { background-color: #3a3a3a; }"
+            "QListWidget::item:selected { background-color: #0078d4; color: white; }"
+        );
+        multi_folder_list_->setContextMenuPolicy(Qt::CustomContextMenu);
+        multi_folder_list_->setVisible(false);
+        connect(multi_folder_list_, &QListWidget::customContextMenuRequested, this,
+                [this](const QPoint& pos) {
+            auto* item = multi_folder_list_->itemAt(pos);
+            if (!item) return;
+            QMenu menu(this);
+            auto* remove_action = menu.addAction("Remove");
+            if (menu.exec(multi_folder_list_->mapToGlobal(pos)) == remove_action) {
+                // Prevent removing the last folder
+                if (source_folders_.size() <= 1) return;
+                QString path = item->text();
+                delete multi_folder_list_->takeItem(multi_folder_list_->row(item));
+                source_folders_.removeAll(path);
+                update_multi_folder_display();
+            }
+        });
+        root_layout->addWidget(multi_folder_list_);
+        
+        // Add Folder button (hidden by default)
+        add_folder_btn_ = new QPushButton("Add Folder...");
+        add_folder_btn_->setStyleSheet(
+            "QPushButton { padding: 4px 12px; background-color: #3a3a3a; color: #aaaaaa; border: 1px solid #555555; }"
+            "QPushButton:hover { background-color: #4a4a4a; }"
+        );
+        add_folder_btn_->setVisible(false);
+        connect(add_folder_btn_, &QPushButton::clicked, this, [this]() {
+            QString path = QFileDialog::getExistingDirectory(this, "Add Source Folder", QDir::homePath());
+            if (!path.isEmpty() && !source_folders_.contains(path)) {
+                source_folders_.append(path);
+                update_multi_folder_display();
+            }
+        });
+        root_layout->addWidget(add_folder_btn_);
+        
+        connect(multi_folder_check_, &QCheckBox::toggled, this, [this](bool checked) {
+            add_folder_btn_->setVisible(checked);
+            if (checked) {
+                // Seed source_folders_ with current chosen_path_ if not empty
+                if (!chosen_path_.isEmpty() && !source_folders_.contains(chosen_path_)) {
+                    source_folders_.prepend(chosen_path_);
+                }
+            } else {
+                // Revert to single-folder mode: keep only primary
+                if (!source_folders_.isEmpty()) {
+                    chosen_path_ = source_folders_.first();
+                }
+                source_folders_.clear();
+                if (!chosen_path_.isEmpty()) {
+                    source_folders_.append(chosen_path_);
+                }
+            }
+            update_multi_folder_display();
+        });
+        
         // Recent folders list (middle-click to remove)
         QStringList recent = db_manager_.get_recent_folders(5);
         if (!recent.isEmpty()) {
@@ -215,11 +290,20 @@ private:
                     [this, recent_list](QListWidgetItem* item) {
                 QString path = item->text();
                 if (QDir(path).exists()) {
-                    chosen_path_ = path;
-                    path_indicator_->setText(path);
-                    path_indicator_->setStyleSheet(
-                        "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
-                    );
+                    if (multi_folder_check_ && multi_folder_check_->isChecked()) {
+                        // In multi-folder mode, add to source list
+                        if (!source_folders_.contains(path)) {
+                            source_folders_.append(path);
+                            update_multi_folder_display();
+                        }
+                    } else {
+                        chosen_path_ = path;
+                        source_folders_ = {path};
+                        path_indicator_->setText(path);
+                        path_indicator_->setStyleSheet(
+                            "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+                        );
+                    }
                 } else {
                     QMessageBox::warning(this, "Folder Not Found",
                         QString("The folder no longer exists:\n%1").arg(path));
@@ -341,21 +425,77 @@ private:
     void pick_folder() {
         QString path = QFileDialog::getExistingDirectory(this, "Pick Folder", QDir::homePath());
         if (!path.isEmpty()) {
-            chosen_path_ = path;
-            path_indicator_->setText(path);
-            path_indicator_->setStyleSheet(
-                "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
-            );
+            if (multi_folder_check_ && multi_folder_check_->isChecked()) {
+                // In multi-folder mode, add as source; set as primary if first
+                if (!source_folders_.contains(path)) {
+                    if (source_folders_.isEmpty()) {
+                        chosen_path_ = path;
+                    }
+                    source_folders_.append(path);
+                    update_multi_folder_display();
+                }
+            } else {
+                chosen_path_ = path;
+                source_folders_ = {path};
+                path_indicator_->setText(path);
+                path_indicator_->setStyleSheet(
+                    "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+                );
+            }
             LOG_INFO("Launcher", QString("Folder selected: %1").arg(path));
         }
     }
     
-    bool show_pre_session_stats() {
-        QDir dir(chosen_path_);
-        QStringList files = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+    void update_multi_folder_display() {
+        bool multi = multi_folder_check_ && multi_folder_check_->isChecked();
+        bool show_list = multi && source_folders_.size() >= 2;
+        if (multi_folder_list_) multi_folder_list_->setVisible(show_list);
         
-        if (files.isEmpty()) {
-            QMessageBox::information(this, "Empty Folder", "This folder has no files to sort.");
+        if (multi_folder_list_ && show_list) {
+            multi_folder_list_->clear();
+            for (const QString& f : source_folders_) {
+                multi_folder_list_->addItem(f);
+            }
+        }
+        
+        // Update chosen_path_ to the first source folder
+        if (!source_folders_.isEmpty()) {
+            chosen_path_ = source_folders_.first();
+        }
+        
+        // Update path indicator
+        if (multi && source_folders_.size() > 1) {
+            path_indicator_->setText(QString("%1 folders selected").arg(source_folders_.size()));
+            path_indicator_->setStyleSheet(
+                "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+            );
+        } else if (!chosen_path_.isEmpty()) {
+            path_indicator_->setText(chosen_path_);
+            path_indicator_->setStyleSheet(
+                "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+            );
+        }
+    }
+    
+    bool show_pre_session_stats() {
+        // Collect files from all source folders
+        QStringList all_files;
+        QStringList subfolders;
+        for (const QString& src : source_folders_) {
+            QDir dir(src);
+            if (!dir.exists()) continue;
+            QStringList entries = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+            for (const QString& f : entries) {
+                all_files.append(dir.absoluteFilePath(f));
+            }
+            QStringList sub = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString& s : sub) {
+                subfolders.append(s);
+            }
+        }
+        
+        if (all_files.isEmpty()) {
+            QMessageBox::information(this, "Empty Folder", "The selected folders have no files to sort.");
             return false;
         }
         
@@ -365,16 +505,15 @@ private:
         QMimeDatabase mime_db;
         
         QProgressDialog* progress = nullptr;
-        if (files.size() > 200) {
-            progress = new QProgressDialog("Analyzing files...", QString(), 0, files.size(), this);
+        if (all_files.size() > 200) {
+            progress = new QProgressDialog("Analyzing files...", QString(), 0, all_files.size(), this);
             progress->setWindowModality(Qt::WindowModal);
             progress->setMinimumDuration(0);
             progress->show();
         }
         
-        for (int i = 0; i < files.size(); ++i) {
-            const QString& file = files[i];
-            QFileInfo info(dir.absoluteFilePath(file));
+        for (int i = 0; i < all_files.size(); ++i) {
+            QFileInfo info(all_files[i]);
             total_size += info.size();
             QString mime = mime_db.mimeTypeForFile(info.absoluteFilePath()).name();
             if (mime.startsWith("image/")) img_count++;
@@ -391,8 +530,6 @@ private:
         }
         delete progress;
         
-        // Collect subfolder info
-        QStringList subfolders = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         int folder_count = subfolders.size();
         
         // Format size
@@ -409,7 +546,10 @@ private:
         
         auto* layout = new QVBoxLayout(&dashboard);
         
-        auto* header = new QLabel(chosen_path_);
+        QString header_text = source_folders_.size() > 1
+            ? QString("%1 source folders (primary: %2)").arg(source_folders_.size()).arg(chosen_path_)
+            : chosen_path_;
+        auto* header = new QLabel(header_text);
         header->setStyleSheet("font-size: 13px; font-weight: bold; color: #3498db;");
         header->setWordWrap(true);
         layout->addWidget(header);
@@ -418,7 +558,7 @@ private:
             "<div style='font-size: 14px; margin: 10px 0;'>"
             "<b>%1 files</b> &middot; %2 total &middot; <b>%3 subfolders</b>"
             "</div>"
-        ).arg(files.size()).arg(size_str).arg(folder_count));
+        ).arg(all_files.size()).arg(size_str).arg(folder_count));
         layout->addWidget(summary);
         
         // Type breakdown
@@ -499,9 +639,22 @@ private:
             return false;
         }
         
-        QDir folder(chosen_path_);
-        if (folder.entryList(QDir::Files).isEmpty()) {
-            QMessageBox::information(this, "Empty Folder", "This folder has no files to sort.");
+        // Ensure source_folders_ has at least the primary folder
+        if (source_folders_.isEmpty()) {
+            source_folders_ = {chosen_path_};
+        }
+        
+        // Check that at least one folder has files
+        bool has_files = false;
+        for (const QString& src : source_folders_) {
+            QDir folder(src);
+            if (!folder.entryList(QDir::Files).isEmpty()) {
+                has_files = true;
+                break;
+            }
+        }
+        if (!has_files) {
+            QMessageBox::information(this, "Empty Folder", "The selected folders have no files to sort.");
             return false;
         }
         
@@ -519,7 +672,7 @@ private:
         
         LOG_INFO("Launcher", "Starting basic mode");
         
-        auto* dlg = new StandaloneFileTinderDialog(chosen_path_, db_manager_, this);
+        auto* dlg = new StandaloneFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
         
         connect(dlg, &StandaloneFileTinderDialog::switch_to_advanced_mode, this, [this, dlg]() {
             dlg->done(QDialog::Accepted);
@@ -550,7 +703,7 @@ private:
         
         LOG_INFO("Launcher", "Starting advanced mode");
         
-        auto* dlg = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this);
+        auto* dlg = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
         
         connect(dlg, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this, dlg]() {
             dlg->done(QDialog::Accepted);
@@ -580,7 +733,7 @@ private:
         
         LOG_INFO("Launcher", "Starting AI mode");
         
-        auto* dlg = new AiFileTinderDialog(chosen_path_, db_manager_, this);
+        auto* dlg = new AiFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
         
         connect(dlg, &AiFileTinderDialog::switch_to_basic_mode, this, [this, dlg]() {
             dlg->done(QDialog::Accepted);

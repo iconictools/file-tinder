@@ -16,7 +16,8 @@ class AdvancedFileTinderDialog : public StandaloneFileTinderDialog {
 public:
     explicit AdvancedFileTinderDialog(const QString& source_folder,
                                        DatabaseManager& db,
-                                       QWidget* parent = nullptr);
+                                       QWidget* parent = nullptr,
+                                       const QStringList& additional_sources = {});
     ~AdvancedFileTinderDialog() override;
     
     void initialize() override;
