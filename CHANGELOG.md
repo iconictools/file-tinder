@@ -1,159 +1,235 @@
 # Changelog
 
 All notable changes to File Tinder are documented in this file.
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased] — 2026-03-03
 
-### Changed — Cross-cutting Decision Model Refactor
-- **"Skip" renamed to "Sort Later"** across all modes, DB schema, UI labels, keyboard shortcuts, and filters. The "Sort Later" action now moves the file to the END of the filtered list instead of just skipping it, so users will encounter it again later.
-- **Redo functionality added**: `redo_stack_` with Y key shortcut alongside existing undo (Z). Standard undo/redo pattern — new actions clear redo stack, undo pushes to redo, redo pushes to undo.
-- **Review summary shows ALL files** including pending (displayed in gray #888), not just files with decisions.
-- **Database constraint updated**: CHECK constraint now allows `'sort_later'` instead of `'skip'`.
-- **FileListWindow context menu**: "Skip" renamed to "Sort Later", status prefix `[S]` → `[L]`.
+### Added
+- **Subfolder depth control**: Spinner (0–5) with confirmation dialogs for depth changes
+- **"Group by decision"** replaces sort combo in File List window
+- **"Other" button** beside AI Suggestions for manual folder assignment
+- **Category limit option** in AI Setup (toggle + spinner 2–50)
+- **Review column click sorting** via `setSortingEnabled`
+- **Visual hierarchy toggle** in grid toolbar
+- **Auto Width toggle** for grid nodes
+- **Sort dropdown** replaces A-Z/# buttons (Manual / A-Z / By Count)
+- **Height spinner** replaces Compact/Expanded toggle (24–60px)
+- **Expand grid fullscreen toggle**
+- **Mode tracking per decision** (`decided_in_mode` field in database)
+- **Drag-and-drop from File List to grid folder nodes** with batch support
+- **Drag-and-drop from File List to keep/delete buttons** with batch support
+- **Real-time file list updates** via `update_item_status`
+- **Node swapping support** (`swap_nodes`) in grid view
+- **Grid save/load** with session metadata and source folder prompts
+- **ManualEditDialog**: Tree/text toggle, middle-click delete, batch operations, add folders/subfolders
+- Quick Access hidden in AI mode; AI Suggestions always visible
 
-### Added — AI Mode Improvements
-- **AI glow borders**: Gold `#f1c40f` glow border on grid nodes that AI suggests for the current file. Toggle via "Glow AI" checkbox in toolbar.
-- **AI reasoning toggle**: "AI Reasoning" checkbox in toolbar controls visibility of reasoning text per file.
-- **"Re-run AI" renamed to "AI Actions"**: Clearer sub-items — "Analyze remaining files", "Re-analyze all files", "Generate new categories".
-- **Confidence threshold removed**: Redundant spinner removed from AI Setup dialog.
-- **Full path tooltips on AI suggestions**: Hovering items in the horizontal AI Suggestions panel instantly shows the full folder path.
+### Changed
+- **"Skip" renamed to "Sort Later"** across all modes, DB schema, UI labels, keyboard shortcuts, and filters — now moves file to END of the filtered list instead of just skipping it
+- **Redo functionality (Y key)** added alongside undo (Z) — standard undo/redo stack pattern
+- **Review summary shows ALL files** including pending (displayed in gray `#888`)
+- **Database constraint updated**: CHECK constraint now allows `'sort_later'` instead of `'skip'`
+- **FileListWindow context menu**: "Skip" → "Sort Later", status prefix `[S]` → `[L]`
+- **AI glow borders**: Gold `#f1c40f` glow on AI-suggested grid nodes, toggled via "Glow AI" checkbox
+- **AI reasoning toggle**: "AI Reasoning" checkbox controls per-file reasoning text visibility
+- **"Re-run AI" renamed to "AI Actions"**: Sub-items — "Analyze remaining files", "Re-analyze all files", "Generate new categories"
+- **Confidence threshold removed** from AI Setup dialog (redundant)
+- **Full path tooltips** on AI Suggestions panel items
+- **3-level path display**: Cycling button — Off (basename) → Paths (relative) → Full Paths (full relative)
+- **Welcome popup removed** in Advanced mode; help accessible via ? button
+- **"Close" renamed to "Consolidate"** in execution results with tooltip explaining permanence
+- **Undo always enabled** in execution log (removed "Permanent" disabled state)
+- **Narrower undo buttons** (60px fixed width) for better table layout
+- **Relative destination paths**: Shows path relative to source folder, or full path if outside
+- **Review column widths**: Mode column 60px fixed, Destination stretches to fill
+- **Folder picker**: Browse icon beside each destination dropdown
+- **Extension-based file icons**: `[PNG]`, `[MP4]`, `[DOCX]` instead of generic `[IMG]`, `[VID]`, `[DOC]`
+- **Folders sorted first** when "Include Folders" is enabled
+- **Improved light theme**: Bootstrap-inspired palette with better contrast, disabled states, and link colors
+- Preview toggle relocated near sort controls
+- Quick access text overflow handled with elision + tooltip
+- Labels audit: consistent mode titles and section headers
+- Filter pipeline fix: proper compose of file type + include folders + search
 
-### Added — Advanced Mode Improvements
-- **3-level path display**: Replaced boolean "Full Paths" toggle with cycling button — Off (basename only) → Paths (relative) → Full Paths (full relative from source).
-- **Welcome popup removed**: Blocking QMessageBox on Advanced mode startup removed. Help accessible via ? button.
+### Fixed
+- Preview zoom no longer reloads on filter/sort change (path caching via `current_preview_path_`)
+- File List window z-order: removed `Qt::WindowStaysOnTopHint`
+- Grid ghost text overlay properly hidden when folders exist (`empty_label_` tracked as member)
+- Review pace accuracy: tracks session time (`session_timer_`) instead of execution time
+- Execution log filter mapping: correctly maps "Moved"→"move", "Deleted"→"delete", "Kept"→"keep"
+- "Session in progress" label hides correctly on Clear Session
 
-### Added — Review & Execution Improvements
-- **"Close" renamed to "Consolidate"**: Button now says "Consolidate" with tooltip explaining permanence.
-- **Undo always enabled**: Removed the "Permanent" disabled state on undo buttons in execution log.
-- **Narrower undo buttons**: Fixed width 60px for better table layout.
-- **Relative destination paths**: Shows path relative to source folder, or full path if outside source.
-- **Review column widths**: Mode column narrow (60px fixed), Destination stretches to fill.
-- **Folder picker**: Browse icon beside each destination dropdown for selecting folders outside the grid.
-
-### Added — Basic Mode Improvements
-- **Extension-based file icons**: Shows actual extension `[PNG]`, `[MP4]`, `[DOCX]` instead of generic categories `[IMG]`, `[VID]`, `[DOC]`.
-- **Folders sorted first**: When "Include Folders" is enabled, directories always sort before files.
-
-### Improved — Light Theme
-- **Warmer Bootstrap-inspired palette**: Better contrast with proper disabled states, placeholder text, and link colors.
-
-### Fixed — Bug Fixes
-- **Preview zoom on filter/sort change**: Image preview no longer reloads when changing filter or sort options (path caching via `current_preview_path_`).
-- **File List window z-order**: Removed `Qt::WindowStaysOnTopHint` so window hides when clicking away from the app.
-- **Grid ghost text overlay**: Empty state label now tracked as member `empty_label_` and properly hidden when folders exist.
-- **Review pace accuracy**: Now tracks session time (dialog open to finish via `session_timer_`) instead of execution time.
-- **Execution log filter mapping**: Correctly maps "Moved"→"move", "Deleted"→"delete", "Kept"→"keep" using `startsWith`.
-- **"Session in progress" label**: Now hides correctly when clicking Clear Session.
-
-### Removed — Dead Code
-- `on_back()` and `show_folder_picker()` — unused methods in StandaloneFileTinderDialog.
-- `FolderNodeWidget` — entirely unused widget (files + CMakeLists entry).
-- 15+ unused `ui_constants.hpp` entries (kNodeWidth, kNodeHeight, kAddNode sizes, ui::icons namespace).
-- `open_diagnostics()` reference removed from launcher.
+### Removed
+- `on_back()` and `show_folder_picker()` — unused methods in StandaloneFileTinderDialog
+- `FolderNodeWidget` — entirely unused widget (files + CMakeLists entry)
+- 15+ unused `ui_constants.hpp` entries (kNodeWidth, kNodeHeight, kAddNode sizes, `ui::icons` namespace)
+- `open_diagnostics()` reference removed from launcher
 
 ---
 
-## [Unreleased] — 2026-03-02
+## [0.6.0] — 2026-03-01
 
-### Added — AI Mode Enhancements
-- **Retry button on API overload**: 3-option error dialog (Retry / Continue / Abort) when AI batch fails. Styled retry button for quick recovery from 429 rate limits.
-- **Dynamic batch sizing**: Replaced fixed 50-file batches with `calculate_batch_size()` that adapts to folder count (>30 folders = 30/batch, >15 = 40/batch), local vs cloud providers (+20 for local), and free-tier rate limits (capped at 25/batch).
-- **File progress bar**: Shows "Files classified: X / Y (Z%)" with green styling during AI analysis.
-- **AI reasoning label**: Displays "AI: [reasoning]" for the current file when the AI provides a reason for its suggestion. Visible in both Auto and Semi modes. Auto-shows/hides per file.
-- **Disabled-state tooltip on Re-run AI**: Tooltip explains "Configure AI provider in 'AI Setup' to enable re-running" when the button is disabled.
-- **Safer 429 decay**: `consecutive_429s_` now uses `qMax(0, ...)` to prevent negative edge case.
-- **Text/list toggle in AI category review**: Users can toggle between plain text editing and structured list view with add/remove buttons for AI-suggested categories.
-- **Duplicate detection in category review**: Warns if user types the same category twice.
+### Added
+- **Retry button on API overload**: 3-option error dialog (Retry / Continue / Abort) on AI batch failure; styled retry button for quick 429 recovery
+- **Dynamic batch sizing**: `calculate_batch_size()` adapts to folder count (>30 folders = 30/batch, >15 = 40/batch), local vs cloud providers (+20 for local), and free-tier rate limits (capped at 25/batch)
+- **File progress bar**: "Files classified: X / Y (Z%)" with green styling during AI analysis
+- **AI reasoning label**: "AI: [reasoning]" per file in Auto and Semi modes, auto-shows/hides
+- **Disabled-state tooltip on Re-run AI**: Explains how to enable when button is disabled
+- **Text/list toggle in AI category review**: Switch between plain text editing and structured list view
+- **Duplicate detection in category review**: Warns on duplicate category names
+- **AI Setup — QScrollArea wrapping**: Scrollable content on small screens; buttons pinned at bottom
+- **AI Setup — URL validation**: Red border and "Invalid URL" tooltip on invalid endpoint
+- **AI Setup — Model combo persistence**: User-typed model names persist via `InsertAtBottom`
+- **AI Setup — Increased purpose field**: Height raised from 45px to 70px
+- **AI Setup — Test API button**: Green "Test" sends minimal request with provider-specific auth headers
+- **AI Setup — Model recommendation label**: Suggests cheapest models for file sorting
+- **AI Setup — Price disclaimer**: Token price estimates warning
+- **AI Setup — Budget cap**: QDoubleSpinBox ($0.00–$100.00) with $0.10 steps; $0.00 = no limit
+- **Review — Size column**: Human-readable file sizes via `QLocale::formattedDataSize`
+- **Review — Filter/sort bar**: Filter by decision type, sort by name/decision/destination
+- **Review — Decision color coding**: Green=keep, red=delete, blue=move, purple=copy, orange=skip
+- **Review — Preview on hover**: Tooltip with file path, size, and MIME type
+- **Review — Destination disambiguation**: Shows `parent/basename` when folder names collide
+- **Review — Keyboard shortcut hint**: "Shortcuts: Ctrl+A = Select all rows"
+- **Review — Styled cancel button**: Gray background, white text, rounded corners
+- **Review — Performance note**: "Loading N files..." for large sets (>500)
+- **Execution results — Filter combo**: Filter by action type (All/Moved/Deleted/Kept)
+- **Execution results — Batch undo**: "Undo All" button with confirmation
+- **Execution results — Export log**: Save execution log as CSV
+- **Execution results — Disk space freed**: "Disk space freed: X MB" in session statistics
+- **File List — Sort combo**: Sort by Name, Decision, or Extension
+- **File List — File size display**: Items show `[K] filename.ext (1.2 KiB)`
+- **File List — Decision context menu**: Keep/Delete/Skip options via right-click; `files_decision_changed` signal
+- **Duplicate Detection — Column sorting** enabled on tree widget
+- **Duplicate Detection — SHA-256 hashing**: Replaces MD5 for hash verification
+- **Duplicate Detection — Keep Newest button**: Auto-selects all but the most recent file per group
+- **Filter Widget — Visual separator**: `QFrame::VLine` between filter and sort sections
+- **Filter Widget — Active filter highlight**: Blue border + tinted background on active filter
+- **Filter Widget — Styled sort button**: Larger with visible border
+- **Filter Widget — Clear filter button**: "X" button to reset filter
+- **Mind Map — Empty state message**: "No destination folders yet. Click [+] to add folders."
+- **Mind Map — Zoom controls**: Zoom in/out/fit adjusts `custom_width_`
+- **Mind Map — Root button styling**: Visually larger and distinct from child buttons
+- **Mind Map — Row-major layout**: Left-to-right, top-to-bottom reading order
+- **Custom Extension Dialog — Batch input**: Comma/space splitting for multiple extensions
+- **Custom Extension Dialog — Extension validation**: Format validation
+- **Undo History Dialog — DPI-scaled sizing**
+- **Undo History Dialog — Column sorting** for all columns
+- **Undo History Dialog — Full paths** instead of basenames
+- **Undo History Dialog — Filter combo** by action type
+- **Theme-aware tooltips**: Styling respects global palette
+- **Interaction discovery tooltips**: Middle-click, double-click behaviors now labeled
 
-### Added — AI Setup Dialog Enhancements
-- **QScrollArea wrapping**: Dialog content scrolls on small screens; buttons pinned at bottom.
-- **URL validation**: Endpoint field shows red border and "Invalid URL" tooltip when scheme is missing/invalid.
-- **Model combo persistence**: Changed from `NoInsert` to `InsertAtBottom` so user-typed model names persist in dropdown.
-- **Increased purpose field**: Text field height raised from 45px to 70px for multi-line descriptions.
-- **Test API button**: Green "Test" button sends minimal "Say OK" request to configured endpoint with provider-specific auth headers. Shows success/failure with HTTP status.
-- **Model recommendation label**: "Recommended: use the cheapest model (gpt-4o-mini, claude-3-haiku, gemini-1.5-flash, llama-3.1-8b) for file sorting."
-- **Price disclaimer**: "(Token prices are estimates and may change. Check your provider dashboard for exact costs.)"
-- **Budget cap**: QDoubleSpinBox ($0.00–$100.00) with $0.10 steps. $0.00 = no limit.
-
-### Added — Review Screen Enhancements
-- **Size column**: Human-readable file sizes via `QLocale::formattedDataSize` in a new column.
-- **Filter/sort bar**: Filter by decision type (All/Keep/Delete/Skip/Move/Copy/Pending) and sort (Original/By Name/By Decision/By Destination).
-- **Decision-based color coding**: File names colorized by decision — green=keep, red=delete, blue=move, purple=copy, orange=skip.
-- **Preview on hover**: Toggle checkbox; hovering rows shows tooltip with file path, size, and MIME type.
-- **Destination disambiguation**: When multiple folders share a basename, combo shows `parent/basename` instead of just `basename`.
-- **Keyboard shortcut hint**: "Shortcuts: Ctrl+A = Select all rows" at bottom.
-- **Styled cancel button**: Gray background (#7f8c8d), white text, rounded corners.
-- **Performance note**: For large file sets (>500), shows "Loading N files..." with `processEvents()`.
-
-### Added — Execution Results Enhancements
-- **Filter combo**: Filter execution log by action type (All/Moved/Deleted/Kept).
-- **Batch undo**: "Undo All" button clicks all enabled undo buttons after confirmation.
-- **Export log**: "Export Log" button saves execution log as CSV via file dialog.
-- **Disk space freed**: Summary shows "Disk space freed: X MB" in red within session statistics.
-
-### Added — File List Window Enhancements
-- **Palette-aware theming**: Removed hardcoded dark theme colors; uses `palette(highlight)` and `palette(highlighted-text)`.
-- **Sort combo**: Sort by Name, Decision, or Extension.
-- **File size display**: Items now show `[K] filename.ext (1.2 KiB)`.
-- **Decision changes from context menu**: Right-click menu includes Keep/Delete/Skip options alongside folder assignment. New `files_decision_changed` signal.
-- **Smaller minimum size**: Reduced from 320x400 to 280x320.
-
-### Added — Duplicate Detection Enhancements
-- **Column sorting**: Enabled `setSortingEnabled(true)` on tree widget.
-- **SHA-256 hashing**: Replaced MD5 with SHA-256 for hash verification. All labels updated.
-- **Keep Newest button**: Selects all duplicates except the most recently modified file in each group for deletion.
-- **Delete button emphasis**: Bold + brighter red (#c0392b) when count > 0; normal when 0.
-
-### Added — Filter Widget UI
-- **Visual separator**: `QFrame::VLine` between filter and sort sections (replaces spacer).
-- **Active filter highlight**: Blue border + blue-tinted background when non-"All" filter is active.
-- **Styled sort button**: Larger with visible border for clearer clickability.
-- **Clear filter button**: "X" button to reset filter to "All".
-
-### Added — Mind Map / Grid View Enhancements
-- **Empty state message**: Shows "No destination folders yet. Click [+] to add folders." when grid is empty.
-- **Zoom controls**: Zoom in/out/fit adjusts `custom_width_` for the widget-based grid.
-- **Root button styling**: Root button is visually larger and distinct from child buttons.
-- **Row-major layout**: Alternative left-to-right, top-to-bottom reading order.
-- **Bounds checking**: `focused_index_` clamped with helper when folder list changes during navigation.
-
-### Added — Custom Extension Dialog
-- **Styled buttons**: Improved Add button styling and extension list appearance.
-- **Batch input**: Comma/space splitting for pasting multiple extensions at once (e.g., "txt, csv, log").
-- **Extension validation**: Format validation for typed extensions.
-
-### Added — Undo History Dialog
-- **DPI-scaled dialog**: Proper sizing based on screen DPI.
-- **Column sorting**: Enabled for all columns.
-- **Full paths**: Shows complete file paths instead of basenames.
-- **Filter combo**: Filter by action type.
-
-### Added — Cross-cutting Improvements
-- **Theme-aware tooltips**: Tooltip styling respects global palette.
-- **Interaction discovery tooltips**: Middle-click to remove from Quick Access, double-click-to-open-file — these interactions are now labeled.
-- **Diagnostic tool deprecated**: Replaced with informational message directing users to alternative resources.
+### Changed
+- **Safer 429 decay**: `consecutive_429s_` uses `qMax(0, ...)` to prevent negative values
+- File List — palette-aware theming replaces hardcoded dark theme colors
+- File List — minimum size reduced from 320×400 to 280×320
+- Duplicate Detection — delete button bold + brighter red (`#c0392b`) when count > 0
+- Mind Map — `focused_index_` clamped with bounds checking helper
+- Diagnostic tool deprecated and replaced with informational message
 
 ### Fixed
-- **"Session in progress" label not hiding on Clear Session**: `resume_label_` now set to invisible after `db_manager_.clear_session()`.
+- "Session in progress" label not hiding on Clear Session (`resume_label_` set invisible after `db_manager_.clear_session()`)
 
-### Assessment
-- Full screen-by-screen assessment of all 17 screens/dialogs with UI Design and Feature grades (see `assessment_screen_ratings`).
-- Comprehensive program assessment covering architecture, code quality, feature completeness, security, performance, and prioritized action items (see `assessment`).
+---
 
-## [0.1.0] — Initial Release
+## [0.5.0] — 2026-02-19
 
-### Core Features
-- **Three-mode file sorting**: Basic (swipe-style), Advanced (visual mind map grid), AI (AI-assisted categorization).
-- **Basic Mode**: Arrow key sorting (→ Keep, ← Delete, ↓ Skip), undo (Z/Backspace), image preview (P), file list (F), search (Ctrl+F), finish review (Enter), help (?).
-- **Advanced Mode**: Clickable folder grid with drag-drop reposition, keyboard navigation (Tab to enter, arrows to navigate, Space/Enter to assign, Escape to exit), quick access bar (1-9, 0), folder creation (N), context menu with color coding (8 preset colors), grid configs save/load, template presets.
-- **AI Mode**: Auto and Semi sorting modes, multi-provider support (OpenAI, Anthropic, Gemini, Mistral, Groq, OpenRouter, Ollama, LM Studio, Custom), taxonomy-aware prompting, category review dialog, correction tracking, smart rate limiting with 429 backoff.
-- **Review & Execute**: Pre-execution review with editable decisions, bulk actions, virtual folder creation, copy support, safe trash deletion, per-action undo.
-- **Execution Results**: Session statistics, review pace metric, per-action undo buttons, error reporting.
-- **File List Window**: Tool window with filter, multi-select, right-click folder assignment, decision status display.
-- **Image Preview**: Zoomable preview window with keyboard navigation, fit/actual size modes, Ctrl+Wheel zoom.
-- **Duplicate Detection**: Name+size matching, SHA-256 hash verification, multi-select deletion, integration with review flow.
-- **Filter Widget**: 9 filter types, 4 sort fields, ascending/descending toggle, custom extension filter, include folders toggle.
-- **Session Persistence**: SQLite database with 8 tables, resume across restarts, recent folders history.
-- **Theme Support**: Dark/Light theme toggle via QPalette, persisted in QSettings.
-- **DPI Scaling**: Consistent scaling via `ui::scaling::factor()` across all dialogs.
-- **Cross-platform**: Windows (SHFileOperation), macOS (osascript), Linux (gio) trash support.
+### Added
+- **AI Mode** (`AiFileTinderDialog`): New third mode inheriting from AdvancedFileTinderDialog
+  - Setup dialog with provider presets: OpenAI, Anthropic, Gemini, Mistral, Groq, OpenRouter, Ollama, LM Studio, Custom
+  - **Auto mode**: AI sorts all files automatically → review screen
+  - **Semi mode**: Highlights top N (2–5) folders per file with confidence scores
+  - **Category handling**: Keep / Generate / Synthesize / Keep+Generate with configurable depth (1–3)
+  - **Batch engine**: ~50 files/batch with taxonomy-aware prompts and 3-level JSON parse fallback
+  - **Correction tracking**: User corrections fed back into subsequent batches
+  - **Smart rate limiting**: Provider-specific defaults with 429 backoff
+- **Qt6::Network dependency** added for AI HTTP requests
+- **File List Window**: Multi-select, filter, right-click folder assignment, F key shortcut
+- **Duplicate Detection Window**: Tree view grouped by name+size, MD5 hash verification, batch delete
+- **Grid controls**: A-Z and # sort buttons, full path toggle, width spinner (80–300px), template presets
+- **Folder color coding**: 8 preset colors via right-click context menu
+- **Grid config persistence**: Save/load with `__meta__` display settings
+- **Keyboard navigation**: Tab enters grid, arrows navigate, Space/Enter assigns, Escape exits
+- **Copy support**: New "copy" decision alongside move/keep/delete/skip
+- **Editable destinations in review**: Type paths directly, `[virtual]` tag for new folders
+- **Three-way mode switching**: Switch Mode dropdown with `switch_to_ai_mode` signal
+- **Dark/Light theme toggle**: Persisted in QSettings via QPalette
+- **DPI scaling**: `ui::scaling::factor()` across all dialogs
+- Text preview wrapped in QScrollArea
+- Search cycling with wraparound
+- Quick access: uniform `sizeHint` with 14-character truncation
+- Cross-platform trash support (Windows SHFileOperation / macOS osascript / Linux gio)
+- Full program assessment document
+
+---
+
+## [0.4.0] — 2026-02-12
+
+### Added
+- **Mind map rewrite**: Vertical list replaced with horizontal grid (`QGridLayout`), configurable rows
+- **Compact folder buttons** (120×28px) with drag-and-drop repositioning
+- **Grid configurations** saved/loaded per root folder (`grid_configs` DB table)
+- **Context menu**: Replace, Remove, Add to Quick Access, Open Folder
+- **ExecutionLogEntry** with persisted `execution_log` DB table
+- **Reversible deletes**: `move_to_trash()` returns trash path
+- **Post-execution dialog** with per-action undo buttons
+- **Launcher "Undo History"** for past executions
+- **Review screen enhancements**: "Basic"/"Advanced" mode column, editable destination dropdown
+- **Advanced compact toolbar**: Keep/Skip collapsed to icon buttons
+- **Visual feedback**: Brief flash on progress label
+- **Efficient preview loading**: `QImageReader::setScaledSize()` for large images
+- **Lazy loading**: `QProgressDialog` for directories with >200 files
+
+### Changed
+- Back button removed — undo (Z/Backspace) replaces it entirely
+
+### Fixed
+- **Critical: Advanced mode freeze** — `load_folder_tree()` triggered O(N²) `refresh_layout()` calls; now batched
+- **Critical: Basic mode crash on rapid clicking** — `animate_swipe()` use-after-free resolved
+- **Critical: Unclosable stacked windows** — Recursive `exec()` calls fixed with `QTimer::singleShot`
+
+---
+
+## [0.3.0] — 2026-02-11
+
+### Added
+- **Double-click to open file** via `QDesktopServices::openUrl()`
+- **DiagnosticTool expanded** from 13 to 22 test suites
+
+### Fixed
+- Removed minimum size height constraints (caused DPI scaling issues)
+- Fixed close behavior: `QDialog::closeEvent` was accepting unconditionally
+- Fixed Advanced mode startup: Removed premature `show()` + `processEvents()` before `initialize()`
+
+---
+
+## [0.2.0] — 2026-02-10
+
+### Added
+- **DiagnosticTool**: Screen Information test, Qt/System Version test
+- `closeEvent` now prompts Save / Discard / Cancel before closing
+
+### Changed
+- Window sizing reduced — Basic: 700×550, Advanced: 800×600
+- Debounced resize handler via QTimer
+
+### Fixed
+- **Crash fix**: Animation memory safety using QPointer
+- Null checks throughout AdvancedFileTinderDialog
+
+---
+
+## [0.1.0] — 2026-02-10
+
+Initial release of File Tinder — a desktop file organizer built with Qt 6 and C++.
+
+### Added
+- **Basic Mode**: Swipe-style file sorting with arrow keys (→ Keep, ← Delete, ↓ Skip, ↑ Back)
+- **Advanced Mode**: Visual mind map / folder grid for organizing files into destination folders
+- **FilterWidget**: 8 filter types (All Files, Images, Videos, Audio, Documents, Archives, Code, Text) plus custom extension filter and 4 sort fields
+- **Session persistence** via SQLite database — resume sorting across restarts
+- **Image preview** with P key toggle
+- **Undo system** via Z / Backspace
+- **CMake build system** with Qt 6 (Core, Widgets, Gui, Sql modules)
