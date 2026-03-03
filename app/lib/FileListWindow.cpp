@@ -198,10 +198,10 @@ void FileListWindow::update_list() {
         item->setData(Qt::UserRole + 201, i);  // filtered index
 
         // Color by decision
-        if (file.decision == "keep") item->setForeground(QColor("#2ecc71"));
-        else if (file.decision == "delete") item->setForeground(QColor("#e74c3c"));
+        if (file.decision == "keep") item->setForeground(QColor(ui::colors::kKeepColor));
+        else if (file.decision == "delete") item->setForeground(QColor(ui::colors::kDeleteColor));
         else if (file.decision == "sort_later") item->setForeground(QColor("#95a5a6"));
-        else if (file.decision == "move") item->setForeground(QColor("#3498db"));
+        else if (file.decision == "move") item->setForeground(QColor(ui::colors::kMoveColor));
         else if (file.decision == "copy") item->setForeground(QColor("#9b59b6"));
 
         // Highlight current file
@@ -272,10 +272,10 @@ void FileListWindow::update_item_status(int file_index) {
                 QLocale().formattedDataSize(file.size, 1, QLocale::DataSizeTraditionalFormat));
             item->setText(display);
 
-            if (file.decision == "keep") item->setForeground(QColor("#2ecc71"));
-            else if (file.decision == "delete") item->setForeground(QColor("#e74c3c"));
+            if (file.decision == "keep") item->setForeground(QColor(ui::colors::kKeepColor));
+            else if (file.decision == "delete") item->setForeground(QColor(ui::colors::kDeleteColor));
             else if (file.decision == "sort_later") item->setForeground(QColor("#95a5a6"));
-            else if (file.decision == "move") item->setForeground(QColor("#3498db"));
+            else if (file.decision == "move") item->setForeground(QColor(ui::colors::kMoveColor));
             else if (file.decision == "copy") item->setForeground(QColor("#9b59b6"));
             else item->setForeground(QColor("#bdc3c7"));
 
