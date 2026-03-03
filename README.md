@@ -212,7 +212,7 @@ file-tinder/
 │   │   ├── FileTinderExecutor.hpp   # Move/delete/copy execution engine
 │   │   ├── DuplicateDetectionWindow.hpp  # SHA-256 duplicate finder
 │   │   ├── AppLogger.hpp            # Application logging
-│   │   ├── DiagnosticTool.hpp       # Interactive diagnostic suites
+│   │   ├── UserDataDialog.hpp       # User data and activity log
 │   │   ├── StandaloneFileTinderDialog.hpp  # Basic mode dialog
 │   │   ├── AdvancedFileTinderDialog.hpp    # Advanced mode dialog
 │   │   └── AiFileTinderDialog.hpp          # AI mode dialog

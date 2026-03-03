@@ -1327,17 +1327,19 @@ void AdvancedFileTinderDialog::keyPressEvent(QKeyEvent* event) {
     }
 
     // Number keys 1-9, 0 for quick access
-    if (event->key() >= Qt::Key_1 && event->key() <= Qt::Key_9) {
-        int index = event->key() - Qt::Key_1;
-        if (index < quick_access_folders_.size()) {
-            on_folder_clicked(quick_access_folders_[index]);
-            return;
+    if (quick_access_panel_ && quick_access_panel_->isVisible()) {
+        if (event->key() >= Qt::Key_1 && event->key() <= Qt::Key_9) {
+            int index = event->key() - Qt::Key_1;
+            if (index < quick_access_folders_.size()) {
+                on_folder_clicked(quick_access_folders_[index]);
+                return;
+            }
         }
-    }
-    if (event->key() == Qt::Key_0) {
-        if (quick_access_folders_.size() >= 10) {
-            on_folder_clicked(quick_access_folders_[9]);
-            return;
+        if (event->key() == Qt::Key_0) {
+            if (quick_access_folders_.size() >= 10) {
+                on_folder_clicked(quick_access_folders_[9]);
+                return;
+            }
         }
     }
     
