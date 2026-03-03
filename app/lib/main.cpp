@@ -104,15 +104,21 @@ private:
             p.setColor(QPalette::Highlight, QColor(0, 120, 212));
             p.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
         } else {
-            p.setColor(QPalette::Window, QColor(240, 240, 240));
-            p.setColor(QPalette::WindowText, QColor(30, 30, 30));
+            p.setColor(QPalette::Window, QColor(248, 249, 250));
+            p.setColor(QPalette::WindowText, QColor(33, 37, 41));
             p.setColor(QPalette::Base, QColor(255, 255, 255));
-            p.setColor(QPalette::AlternateBase, QColor(235, 235, 235));
-            p.setColor(QPalette::Text, QColor(30, 30, 30));
-            p.setColor(QPalette::Button, QColor(225, 225, 225));
-            p.setColor(QPalette::ButtonText, QColor(30, 30, 30));
-            p.setColor(QPalette::Highlight, QColor(0, 120, 212));
+            p.setColor(QPalette::AlternateBase, QColor(241, 243, 245));
+            p.setColor(QPalette::Text, QColor(33, 37, 41));
+            p.setColor(QPalette::Button, QColor(233, 236, 239));
+            p.setColor(QPalette::ButtonText, QColor(33, 37, 41));
+            p.setColor(QPalette::Highlight, QColor(13, 110, 253));
             p.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+            p.setColor(QPalette::ToolTipBase, QColor(255, 255, 255));
+            p.setColor(QPalette::ToolTipText, QColor(33, 37, 41));
+            p.setColor(QPalette::PlaceholderText, QColor(108, 117, 125));
+            p.setColor(QPalette::Link, QColor(13, 110, 253));
+            p.setColor(QPalette::Disabled, QPalette::Text, QColor(173, 181, 189));
+            p.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(173, 181, 189));
         }
         QApplication::setPalette(p);
         if (is_dark_theme_) {

@@ -752,27 +752,10 @@ void StandaloneFileTinderDialog::update_preview(const QString& file_path) {
     preview_label_->setStyleSheet("");
     preview_label_->setAlignment(Qt::AlignCenter);
     
-    // Determine icon for the file type (always shown centered)
-    QString icon = "[FILE]";
-    if (finfo.isDir()) {
-        icon = "[DIR]";
-    } else if (type.startsWith("image/")) {
-        icon = "[IMG]";
-    } else if (type.startsWith("video/")) {
-        icon = "[VID]";
-    } else if (type.startsWith("audio/")) {
-        icon = "[AUD]";
-    } else if (type.contains("pdf")) {
-        icon = "[PDF]";
-    } else if (type.contains("zip") || type.contains("archive") || type.contains("compressed")) {
-        icon = "[ZIP]";
-    } else if (type.contains("spreadsheet") || type.contains("excel")) {
-        icon = "[XLS]";
-    } else if (type.contains("document") || type.contains("word")) {
-        icon = "[DOC]";
-    } else if (type.startsWith("text/")) {
-        icon = "[TXT]";
-    }
+    // Show file extension as the icon label
+    QString ext = finfo.suffix().toUpper();
+    if (ext.isEmpty()) ext = finfo.isDir() ? "DIR" : "FILE";
+    QString icon = "[" + ext + "]";
     
     // Set the centered icon
     if (file_icon_label_) {
@@ -1853,7 +1836,16 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
             
             QString dest_display;
             if (!entry.dest_path.isEmpty()) {
-                dest_display = entry.action == "delete" ? "(trash)" : QFileInfo(entry.dest_path).fileName();
+                if (entry.action == "delete") {
+                    dest_display = "(trash)";
+                } else if (entry.dest_path.startsWith(source_folder_)) {
+                    // Show relative to source folder
+                    dest_display = entry.dest_path.mid(source_folder_.length());
+                    if (dest_display.startsWith('/')) dest_display = dest_display.mid(1);
+                    if (dest_display.isEmpty()) dest_display = ".";
+                } else {
+                    dest_display = entry.dest_path;
+                }
             } else if (entry.action == "delete") {
                 dest_display = "(permanent)";
             }
@@ -1863,16 +1855,14 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
             table->setItem(i, 2, dest_item);
             
             auto* undo_btn = new QPushButton("Undo");
+            undo_btn->setFixedWidth(60);
             undo_btn->setStyleSheet(
-                "QPushButton { background-color: #e67e22; color: white; padding: 2px 8px; border-radius: 3px; }"
+                "QPushButton { background-color: #e67e22; color: white; padding: 2px 6px; border-radius: 3px; }"
                 "QPushButton:hover { background-color: #d35400; }"
                 "QPushButton:disabled { background-color: #7f8c8d; color: #bdc3c7; }"
             );
-            // Disable undo for permanently deleted files (no trash path)
             if (entry.action == "delete" && entry.dest_path.isEmpty()) {
-                undo_btn->setEnabled(false);
-                undo_btn->setText("Permanent");
-                undo_btn->setToolTip("File was permanently deleted — cannot undo");
+                undo_btn->setToolTip("File was permanently deleted — undo will attempt recovery");
             }
             connect(undo_btn, &QPushButton::clicked, this, [this, entry, undo_btn, action_item]() {
                 if (FileTinderExecutor::undo_action(entry)) {
@@ -1962,12 +1952,13 @@ void StandaloneFileTinderDialog::show_execution_results(const ExecutionResult& r
     auto* btn_layout = new QHBoxLayout();
     btn_layout->addStretch();
     
-    auto* close_btn = new QPushButton("Close");
+    auto* close_btn = new QPushButton("Consolidate");
     close_btn->setStyleSheet(
         "QPushButton { background-color: #27ae60; color: white; font-weight: bold; "
         "padding: 10px 25px; border-radius: 6px; }"
         "QPushButton:hover { background-color: #2ecc71; }"
     );
+    close_btn->setToolTip("Finalize all changes — undone operations will be permanent after this");
     connect(close_btn, &QPushButton::clicked, &results_dialog, &QDialog::accept);
     btn_layout->addWidget(close_btn);
     
@@ -2205,6 +2196,10 @@ void StandaloneFileTinderDialog::apply_sort() {
     if (files_.empty()) return;
     
     auto compare_fn = [this](const FileToProcess& a, const FileToProcess& b) {
+        // When including folders, always sort directories before files
+        if (include_folders_ && a.is_directory != b.is_directory) {
+            return a.is_directory;  // directories come first
+        }
         int cmp = 0;
         switch (sort_field_) {
             case FileSortField::Name:
