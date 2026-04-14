@@ -1,4 +1,6 @@
 #include "AdvancedFileTinderDialog.hpp"
+#include "ManualEditDialog.hpp"
+#include "FileListWindow.hpp"
 #include "FolderTreeModel.hpp"
 #include "MindMapView.hpp"
 #include "FilterWidget.hpp"
@@ -20,16 +22,24 @@
 #include <QDir>
 #include <QMimeDatabase>
 #include <QSettings>
+#include <QDateTime>
 #include <QScreen>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QImageReader>
+#include <QFontMetrics>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDataStream>
 #include <algorithm>
 
 AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
                                                    DatabaseManager& db,
-                                                   QWidget* parent)
-    : StandaloneFileTinderDialog(source_folder, db, parent)
+                                                   QWidget* parent,
+                                                   const QStringList& additional_sources,
+                                                   FolderTreeModel* shared_folder_model)
+    : StandaloneFileTinderDialog(source_folder, db, parent, additional_sources)
     , scroll_area_(nullptr)
     , main_content_(nullptr)
     , mind_map_view_(nullptr)
@@ -41,24 +51,18 @@ AdvancedFileTinderDialog::AdvancedFileTinderDialog(const QString& source_folder,
     , quick_access_panel_(nullptr)
     , quick_access_list_(nullptr)
     , filter_widget_(nullptr)
-    , folder_model_(nullptr) {
+    , folder_model_(shared_folder_model) {
     
-    setWindowTitle(QString("File Tinder - Advanced Mode — %1").arg(QFileInfo(source_folder).fileName()));
-    setMinimumWidth(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinWidth));
+    setWindowTitle(QString("Advanced Mode — %1").arg(QFileInfo(source_folder).fileName()));
+    mode_name_ = "Advanced";
 }
 
 AdvancedFileTinderDialog::~AdvancedFileTinderDialog() = default;
 
 void AdvancedFileTinderDialog::initialize() {
     StandaloneFileTinderDialog::initialize();
-    
-    // Override the base class sizing for advanced mode (needs more width)
-    if (auto* screen = QApplication::primaryScreen()) {
-        QRect avail = screen->availableGeometry();
-        int w = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinWidth), avail.width() * 9 / 10);
-        int h = qMin(ui::scaling::scaled(ui::dimensions::kAdvancedFileTinderMinHeight), avail.height() * 8 / 10);
-        resize(w, h);
-    }
+    // NOTE: Window sizing is managed by the parent (FileTinderLauncher)
+    // since mode widgets are pages in a QStackedWidget.
 }
 
 void AdvancedFileTinderDialog::setup_ui() {
@@ -81,7 +85,7 @@ void AdvancedFileTinderDialog::setup_ui() {
     auto* title_layout = new QHBoxLayout(title_bar);
     title_layout->setContentsMargins(0, 0, 0, 0);
     
-    auto* title_label = new QLabel("File Tinder - Advanced Mode");
+    auto* title_label = new QLabel("Advanced Mode");
     title_label->setStyleSheet("font-size: 16px; font-weight: bold;");
     title_layout->addWidget(title_label);
     
@@ -128,9 +132,14 @@ void AdvancedFileTinderDialog::setup_ui() {
     // Action buttons at bottom
     setup_action_buttons();
     
-    // Initialize folder model
-    folder_model_ = new FolderTreeModel(this);
-    folder_model_->set_root_folder(source_folder_);
+    // Initialize folder model (use shared model if provided, else create new)
+    if (!folder_model_) {
+        folder_model_ = new FolderTreeModel(this);
+        folder_model_->set_root_folder(source_folder_);
+    } else if (folder_model_->root_folder() != source_folder_) {
+        // Shared model is for a different folder — update it
+        folder_model_->set_root_folder(source_folder_);
+    }
     mind_map_view_->set_model(folder_model_);
     
     // Load saved data
@@ -150,18 +159,8 @@ void AdvancedFileTinderDialog::setup_ui() {
     // Requirement 2: Detect missing folders (deleted from disk between sessions)
     check_missing_folders();
     
-    // Requirement 1: First-time onboarding prompt
-    if (folder_model_ && folder_model_->root_node() && 
-        folder_model_->root_node()->children.empty()) {
-        QMessageBox::information(this, "Welcome to Advanced Mode",
-            "Welcome to Advanced Mode!\n\n"
-            "• Click the [+ Add Folder] button to add destination folders\n"
-            "• Click any folder to assign the current file to it\n"
-            "• Use keys 1-0 for Quick Access slots\n"
-            "• Right-click folders for more options\n\n"
-            "Tip: You can add folders outside the source directory — "
-            "they'll be shown in purple.");
-    }
+    // Requirement 1: First-time onboarding — help is available via the ? button
+    // (welcome popup removed to avoid blocking the user)
     
     // Initialize display
     if (!files_.empty()) {
@@ -178,7 +177,7 @@ void AdvancedFileTinderDialog::setup_filter_bar() {
         // Reset counts before re-scanning and reloading state
         keep_count_ = 0;
         delete_count_ = 0;
-        skip_count_ = 0;
+        sort_later_count_ = 0;
         move_count_ = 0;
         scan_files();
         apply_sort();
@@ -215,30 +214,34 @@ void AdvancedFileTinderDialog::setup_mind_map() {
     });
     grid_toolbar->addWidget(rows_spin);
     
-    auto* compact_btn = new QPushButton("Compact");
-    compact_btn->setMaximumWidth(70);
-    compact_btn->setCheckable(true);
-    compact_btn->setChecked(true);
-    compact_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
-    compact_btn->setToolTip("Toggle compact/expanded folder buttons");
-    connect(compact_btn, &QPushButton::toggled, this, [this, compact_btn](bool checked) {
-        compact_btn->setText(checked ? "Compact" : "Expanded");
+    auto* height_label = new QLabel("Height:");
+    grid_toolbar->addWidget(height_label);
+    auto* height_spin = new QSpinBox();
+    height_spin->setRange(24, 60);
+    height_spin->setValue(32);
+    height_spin->setSingleStep(4);
+    height_spin->setMaximumWidth(55);
+    height_spin->setToolTip("Folder button height in pixels");
+    connect(height_spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
         if (mind_map_view_) {
-            mind_map_view_->set_compact_mode(checked);
-            mind_map_view_->refresh_layout();
+            mind_map_view_->set_custom_height(val);
         }
     });
-    grid_toolbar->addWidget(compact_btn);
+    grid_toolbar->addWidget(height_spin);
     
-    auto* fullpath_btn = new QPushButton("Full Paths");
+    auto* fullpath_btn = new QPushButton("Off");
     fullpath_btn->setMaximumWidth(75);
-    fullpath_btn->setCheckable(true);
-    fullpath_btn->setChecked(false);
     fullpath_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
-    fullpath_btn->setToolTip("Show full folder path structure in button names");
-    connect(fullpath_btn, &QPushButton::toggled, this, [this](bool checked) {
+    fullpath_btn->setToolTip("Cycle path display: Off → Paths → Full Paths");
+    fullpath_btn->setProperty("path_mode", 0);
+    connect(fullpath_btn, &QPushButton::clicked, this, [this, fullpath_btn]() {
+        int mode = fullpath_btn->property("path_mode").toInt();
+        mode = (mode + 1) % 3;
+        fullpath_btn->setProperty("path_mode", mode);
+        static const char* labels[] = {"Off", "Paths", "Full Paths"};
+        fullpath_btn->setText(labels[mode]);
         if (mind_map_view_) {
-            mind_map_view_->set_show_full_paths(checked);
+            mind_map_view_->set_path_display_mode(mode);
             mind_map_view_->refresh_layout();
         }
     });
@@ -258,25 +261,58 @@ void AdvancedFileTinderDialog::setup_mind_map() {
         }
     });
     grid_toolbar->addWidget(width_spin);
-    
-    // Grid sorting buttons
-    auto* sort_az_btn = new QPushButton("A-Z");
-    sort_az_btn->setMaximumWidth(35);
-    sort_az_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 4px; }");
-    sort_az_btn->setToolTip("Sort grid folders alphabetically");
-    connect(sort_az_btn, &QPushButton::clicked, this, [this]() {
-        if (mind_map_view_) mind_map_view_->sort_alphabetically();
+
+    auto* auto_width_check = new QCheckBox("Auto Width");
+    auto_width_check->setStyleSheet("QCheckBox { font-size: 10px; }");
+    auto_width_check->setToolTip("Auto-size buttons to fit text content");
+    connect(auto_width_check, &QCheckBox::toggled, this, [this, width_spin](bool checked) {
+        width_spin->setEnabled(!checked);
+        if (mind_map_view_) {
+            mind_map_view_->set_auto_width(checked);
+        }
     });
-    grid_toolbar->addWidget(sort_az_btn);
+    grid_toolbar->addWidget(auto_width_check);
     
-    auto* sort_count_btn = new QPushButton("#");
-    sort_count_btn->setMaximumWidth(25);
-    sort_count_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 4px; }");
-    sort_count_btn->setToolTip("Sort grid folders by file count (most files first)");
-    connect(sort_count_btn, &QPushButton::clicked, this, [this]() {
-        if (mind_map_view_) mind_map_view_->sort_by_count();
+    // Grid sort dropdown
+    grid_toolbar->addWidget(new QLabel("Sort:"));
+    auto* grid_sort_combo = new QComboBox();
+    grid_sort_combo->addItems({"Manual", "A-Z", "By Count"});
+    grid_sort_combo->setMaximumWidth(90);
+    grid_sort_combo->setStyleSheet("QComboBox { font-size: 10px; }");
+    grid_sort_combo->setToolTip("Sort grid folders");
+    connect(grid_sort_combo, &QComboBox::currentTextChanged, this, [this](const QString& text) {
+        if (!mind_map_view_) return;
+        if (text == "A-Z") mind_map_view_->sort_alphabetically();
+        else if (text == "By Count") mind_map_view_->sort_by_count();
     });
-    grid_toolbar->addWidget(sort_count_btn);
+    grid_toolbar->addWidget(grid_sort_combo);
+    
+    // Hierarchy toggle
+    auto* hierarchy_check = new QCheckBox("Hierarchy");
+    hierarchy_check->setStyleSheet("QCheckBox { font-size: 10px; }");
+    hierarchy_check->setToolTip("Indent subfolder nodes by depth");
+    connect(hierarchy_check, &QCheckBox::toggled, this, [this](bool checked) {
+        if (mind_map_view_) {
+            mind_map_view_->set_show_hierarchy(checked);
+        }
+    });
+    grid_toolbar->addWidget(hierarchy_check);
+
+    auto* expand_btn = new QPushButton("Expand");
+    expand_btn->setMaximumWidth(60);
+    expand_btn->setStyleSheet("QPushButton { font-size: 10px; padding: 2px 6px; }");
+    expand_btn->setToolTip("Toggle fullscreen view");
+    expand_btn->setCheckable(true);
+    connect(expand_btn, &QPushButton::toggled, this, [this, expand_btn](bool checked) {
+        if (checked) {
+            showFullScreen();
+            expand_btn->setText("Restore");
+        } else {
+            showNormal();
+            expand_btn->setText("Expand");
+        }
+    });
+    grid_toolbar->addWidget(expand_btn);
     
     grid_toolbar->addStretch();
     
@@ -348,11 +384,36 @@ void AdvancedFileTinderDialog::setup_mind_map() {
             this, &AdvancedFileTinderDialog::on_folder_context_menu);
     connect(mind_map_view_, &MindMapView::add_folder_requested,
             this, &AdvancedFileTinderDialog::on_add_node_clicked);
+    connect(mind_map_view_, &MindMapView::files_dropped, this, [this](const QString& folder_path, const QList<int>& indices) {
+        for (int fi : indices) {
+            if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                auto& file = files_[fi];
+                QString old_decision = file.decision;
+                if (file.decision != "pending") {
+                    update_decision_count(file.decision, -1);
+                    if (file.decision == "move" && !file.destination_folder.isEmpty() && folder_model_) {
+                        folder_model_->unassign_file_from_folder(file.destination_folder);
+                    }
+                }
+                file.decision = "move";
+                file.destination_folder = folder_path;
+                file.decided_in_mode = mode_name_;
+                move_count_++;
+                if (folder_model_) folder_model_->assign_file_to_folder(folder_path);
+                record_action(fi, old_decision, "move", folder_path);
+                db_.save_file_decision(source_folder_, file.path, "move", folder_path, file.decided_in_mode);
+            }
+        }
+        update_progress();
+        update_stats();
+        show_current_file();
+        if (mind_map_view_) mind_map_view_->refresh_layout();
+    });
     
     map_layout->addWidget(mind_map_view_);
     
     // Hint label
-    auto* hint = new QLabel("Click folder to assign file. [+] to add. Right-click for options. K=Keep, D=Delete, S=Skip, 1-0=Quick Access, Tab=Grid navigation");
+    auto* hint = new QLabel("Click folder to assign file. [+] to add. Right-click for options. K=Keep, D=Delete, S=Sort Later, 1-0=Quick Access, Tab=Grid navigation");
     hint->setStyleSheet("color: #666; font-size: 10px;");
     hint->setWordWrap(true);
     map_layout->addWidget(hint);
@@ -381,7 +442,7 @@ void AdvancedFileTinderDialog::setup_file_info_panel() {
     file_name_label_ = new QLabel("No file selected");
     file_name_label_->setStyleSheet("font-size: 14px; font-weight: bold; color: #ecf0f1;");
     file_name_label_->setCursor(Qt::PointingHandCursor);
-    file_name_label_->setToolTip("Double-click to open file");
+    file_name_label_->setToolTip("Double-click to open file. Right-click for options.");
     file_name_label_->installEventFilter(this);
     text_layout->addWidget(file_name_label_);
     
@@ -436,6 +497,7 @@ void AdvancedFileTinderDialog::setup_quick_access_panel() {
     connect(quick_access_list_, &QListWidget::itemClicked,
             this, &AdvancedFileTinderDialog::on_quick_access_clicked);
     // Middle-click to remove items from Quick Access
+    quick_access_list_->setToolTip("Click to assign file. Middle-click to remove.");
     quick_access_list_->viewport()->installEventFilter(this);
     qa_layout->addWidget(quick_access_list_, 1);
     
@@ -486,9 +548,11 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
         "QPushButton:disabled { background-color: #5d3a37; color: #888; }"
     ).arg(ui::colors::kDeleteColor));
     connect(delete_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_delete);
+    delete_btn_->setAcceptDrops(true);
+    delete_btn_->installEventFilter(this);
     action_layout->addWidget(delete_btn_, 2);
     
-    // Keep compact (secondary in Advanced — clicking folders is primary)
+    // Keep compact (secondary in Advanced -- clicking folders is primary)
     keep_btn_ = new QPushButton("Keep [K]");
     keep_btn_->setMinimumHeight(btn_h);
     keep_btn_->setStyleSheet(QString(
@@ -497,18 +561,20 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
         "QPushButton:disabled { background-color: #2d5d3a; color: #888; }"
     ).arg(ui::colors::kKeepColor));
     connect(keep_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_keep);
+    keep_btn_->setAcceptDrops(true);
+    keep_btn_->installEventFilter(this);
     action_layout->addWidget(keep_btn_, 1);
     
-    // Skip compact
-    skip_btn_ = new QPushButton("Skip [↓]");
-    skip_btn_->setMinimumHeight(btn_h);
-    skip_btn_->setStyleSheet(QString(
+    // Sort Later compact
+    sort_later_btn_ = new QPushButton("Sort Later [↓]");
+    sort_later_btn_->setMinimumHeight(btn_h);
+    sort_later_btn_->setStyleSheet(QString(
         "QPushButton { background-color: %1; color: white; font-size: 11px; border-radius: 4px; }"
         "QPushButton:hover { background-color: #e67e22; }"
         "QPushButton:disabled { background-color: #5d4e37; color: #888; }"
-    ).arg(ui::colors::kSkipColor));
-    connect(skip_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_skip);
-    action_layout->addWidget(skip_btn_, 1);
+    ).arg(ui::colors::kSortLaterColor));
+    connect(sort_later_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_sort_later);
+    action_layout->addWidget(sort_later_btn_, 1);
     
     // Undo compact
     undo_btn_ = new QPushButton("Undo [Z]");
@@ -522,15 +588,28 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
     connect(undo_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_undo);
     action_layout->addWidget(undo_btn_, 1);
     
+    // Redo compact
+    redo_btn_ = new QPushButton("Redo [Y]");
+    redo_btn_->setMinimumHeight(btn_h);
+    redo_btn_->setStyleSheet(
+        "QPushButton { background-color: #9b59b6; color: white; font-size: 11px; border-radius: 4px; }"
+        "QPushButton:hover { background-color: #8e44ad; }"
+        "QPushButton:disabled { background-color: #5d4e6e; color: #888; }"
+    );
+    redo_btn_->setEnabled(false);
+    connect(redo_btn_, &QPushButton::clicked, this, &AdvancedFileTinderDialog::on_redo);
+    action_layout->addWidget(redo_btn_, 1);
+    
     static_cast<QVBoxLayout*>(layout())->addWidget(action_widget);
     
     // Bottom bar
     auto* bottom_widget = new QWidget();
     auto* bottom_layout = new QHBoxLayout(bottom_widget);
     
-    auto* cancel_btn = new QPushButton("Cancel");
+    auto* cancel_btn = new QPushButton("Back");
     cancel_btn->setStyleSheet("QPushButton { padding: 8px 16px; }");
-    connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
+    cancel_btn->setToolTip("Return to the launcher screen");
+    connect(cancel_btn, &QPushButton::clicked, this, &AdvancedFileTinderDialog::request_close);
     bottom_layout->addWidget(cancel_btn);
     
     auto* reset_btn = new QPushButton("Reset");
@@ -551,7 +630,7 @@ void AdvancedFileTinderDialog::setup_action_buttons() {
     
     bottom_layout->addStretch();
     
-    finish_btn_ = new QPushButton("Finish & Execute");
+    finish_btn_ = new QPushButton("Review & Execute");
     finish_btn_->setStyleSheet(
         "QPushButton { padding: 10px 25px; background-color: #27ae60; "
         "color: white; font-weight: bold; border-radius: 4px; }"
@@ -588,10 +667,14 @@ void AdvancedFileTinderDialog::on_folder_clicked(const QString& folder_path) {
     
     file.decision = "move";
     file.destination_folder = folder_path;
+    file.decided_in_mode = mode_name_;
     move_count_++;
     
     // Record for undo (store the OLD destination so it can be restored)
     record_action(file_idx, old_decision, "move", old_dest_folder);
+
+    // Update file list window in real time
+    if (file_list_window_) file_list_window_->update_item_status(file_idx);
     
     if (folder_model_) folder_model_->assign_file_to_folder(folder_path);
     if (mind_map_view_) mind_map_view_->set_selected_folder(folder_path);
@@ -658,6 +741,26 @@ void AdvancedFileTinderDialog::prompt_add_folder() {
                 }
                 if (folder_model_) folder_model_->add_folder(folder, false);
                 added++;
+            }
+            if (added > 0 && mind_map_view_) mind_map_view_->refresh_layout();
+        }
+    });
+    
+    menu.addAction("Manual Edit...", [this]() {
+        QStringList current_folders = get_destination_folders();
+        ManualEditDialog dlg(source_folder_, current_folders, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            QStringList new_folders = dlg.get_folders();
+            // Add any new folders to the grid
+            int added = 0;
+            if (folder_model_) {
+                for (const QString& folder : new_folders) {
+                    if (folder.isEmpty() || folder == source_folder_) continue;
+                    if (folder_model_->find_node(folder)) continue;
+                    bool is_virtual = !QDir(folder).exists();
+                    folder_model_->add_folder(folder, is_virtual);
+                    added++;
+                }
             }
             if (added > 0 && mind_map_view_) mind_map_view_->refresh_layout();
         }
@@ -774,7 +877,7 @@ void AdvancedFileTinderDialog::on_folder_context_menu(const QString& folder_path
                         save_folder_tree();
                         save_quick_access();
                         save_session_state();
-                        reject();
+                        request_close();
                     }
                 });
             }
@@ -878,20 +981,22 @@ void AdvancedFileTinderDialog::remove_from_quick_access(int index) {
 void AdvancedFileTinderDialog::update_quick_access_display() {
     quick_access_list_->clear();
     
-    static const int kMaxQuickAccessNameLength = 14;
+    const int kMaxItemWidth = ui::scaling::scaled(120);
     
     for (int i = 0; i < quick_access_folders_.size(); ++i) {
         QString path = quick_access_folders_[i];
         QString folder_name = QFileInfo(path).fileName();
-        // Truncate long names to keep uniform item width
-        if (folder_name.length() > kMaxQuickAccessNameLength) {
-            folder_name = folder_name.left(kMaxQuickAccessNameLength - 1) + "…";
-        }
-        QString label = QString("%1: %2").arg(i == 9 ? 0 : i + 1).arg(folder_name);
+        QString prefix = QString("%1: ").arg(i == 9 ? 0 : i + 1);
+        // Use font metrics to elide text to fit within max width
+        QFontMetrics fm(quick_access_list_->font());
+        const int kItemPadding = 16;  // Left + right padding within item widget
+        int available_width = kMaxItemWidth - fm.horizontalAdvance(prefix) - kItemPadding;
+        QString elided = fm.elidedText(folder_name, Qt::ElideRight, available_width);
+        QString label = prefix + elided;
         auto* item = new QListWidgetItem(label);
         item->setData(Qt::UserRole, path);
         item->setToolTip(path);
-        item->setSizeHint(QSize(ui::scaling::scaled(120), ui::scaling::scaled(28)));
+        item->setSizeHint(QSize(kMaxItemWidth, ui::scaling::scaled(28)));
         quick_access_list_->addItem(item);
     }
 }
@@ -1036,22 +1141,67 @@ void AdvancedFileTinderDialog::show_current_file() {
     }
 }
 
-void AdvancedFileTinderDialog::closeEvent(QCloseEvent* event) {
-    // Route through reject() — don't delegate to QDialog::closeEvent
-    event->ignore();
-    reject();
-}
-
-void AdvancedFileTinderDialog::reject() {
+void AdvancedFileTinderDialog::request_close() {
     // Save advanced-mode-specific state before base class handles close prompt
     save_folder_tree();
     save_quick_access();
     
-    // Base class reject() shows save prompt and terminates exec()
-    StandaloneFileTinderDialog::reject();
+    // Base class request_close() shows save prompt and emits request_back
+    StandaloneFileTinderDialog::request_close();
 }
 
 bool AdvancedFileTinderDialog::eventFilter(QObject* obj, QEvent* event) {
+    // Handle drag-and-drop from FileListWindow onto keep/delete buttons
+    if ((obj == keep_btn_ || obj == delete_btn_) && event->type() == QEvent::DragEnter) {
+        auto* de = static_cast<QDragEnterEvent*>(event);
+        if (de->mimeData()->hasFormat("application/x-filetinder-indices")) {
+            de->acceptProposedAction();
+            return true;
+        }
+    }
+    if ((obj == keep_btn_ || obj == delete_btn_) && event->type() == QEvent::Drop) {
+        auto* de = static_cast<QDropEvent*>(event);
+        if (de->mimeData()->hasFormat("application/x-filetinder-indices")) {
+            QByteArray encoded = de->mimeData()->data("application/x-filetinder-indices");
+            QDataStream stream(&encoded, QIODevice::ReadOnly);
+            QList<int> indices;
+            while (!stream.atEnd()) {
+                int idx;
+                stream >> idx;
+                indices.append(idx);
+            }
+            de->acceptProposedAction();
+
+            QString decision;
+            if (obj == keep_btn_) decision = "keep";
+            else if (obj == delete_btn_) decision = "delete";
+
+            if (!decision.isEmpty()) {
+                for (int fi : indices) {
+                    if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                        auto& file = files_[fi];
+                        QString old_decision = file.decision;
+                        if (old_decision == decision) continue;
+                        if (file.decision != "pending") {
+                            update_decision_count(file.decision, -1);
+                            if (file.decision == "move" && !file.destination_folder.isEmpty() && folder_model_) {
+                                folder_model_->unassign_file_from_folder(file.destination_folder);
+                            }
+                        }
+                        file.decision = decision;
+                        file.decided_in_mode = mode_name_;
+                        update_decision_count(decision, 1);
+                        record_action(fi, old_decision, decision);
+                        db_.save_file_decision(source_folder_, file.path, decision, file.destination_folder, file.decided_in_mode);
+                    }
+                }
+                update_progress();
+                update_stats();
+                show_current_file();
+            }
+            return true;
+        }
+    }
     if (obj == file_name_label_ && event->type() == QEvent::MouseButtonDblClick) {
         int file_idx = get_current_file_index();
         if (file_idx >= 0 && file_idx < static_cast<int>(files_.size())) {
@@ -1172,17 +1322,19 @@ void AdvancedFileTinderDialog::keyPressEvent(QKeyEvent* event) {
     }
 
     // Number keys 1-9, 0 for quick access
-    if (event->key() >= Qt::Key_1 && event->key() <= Qt::Key_9) {
-        int index = event->key() - Qt::Key_1;
-        if (index < quick_access_folders_.size()) {
-            on_folder_clicked(quick_access_folders_[index]);
-            return;
+    if (quick_access_panel_ && quick_access_panel_->isVisible()) {
+        if (event->key() >= Qt::Key_1 && event->key() <= Qt::Key_9) {
+            int index = event->key() - Qt::Key_1;
+            if (index < quick_access_folders_.size()) {
+                on_folder_clicked(quick_access_folders_[index]);
+                return;
+            }
         }
-    }
-    if (event->key() == Qt::Key_0) {
-        if (quick_access_folders_.size() >= 10) {
-            on_folder_clicked(quick_access_folders_[9]);
-            return;
+        if (event->key() == Qt::Key_0) {
+            if (quick_access_folders_.size() >= 10) {
+                on_folder_clicked(quick_access_folders_[9]);
+                return;
+            }
         }
     }
     
@@ -1203,7 +1355,7 @@ void AdvancedFileTinderDialog::keyPressEvent(QKeyEvent* event) {
             break;
         case Qt::Key_Down:
         case Qt::Key_S:
-            on_skip();
+            on_sort_later();
             break;
         case Qt::Key_Up:
             break;  // No back — use Z for Undo
@@ -1221,7 +1373,7 @@ void AdvancedFileTinderDialog::on_filter_changed() {
     FileFilterType filter_type = filter_widget_->get_filter_type();
     
     // Prompt user about resetting progress when filter changes
-    int reviewed = keep_count_ + delete_count_ + skip_count_ + move_count_;
+    int reviewed = keep_count_ + delete_count_ + sort_later_count_ + move_count_;
     if (reviewed > 0) {
         auto reply = QMessageBox::question(this, "Filter Changed",
             QString("You have %1 decisions made. Do you want to reset progress?\n\n"
@@ -1238,10 +1390,12 @@ void AdvancedFileTinderDialog::on_filter_changed() {
             }
             keep_count_ = 0;
             delete_count_ = 0;
-            skip_count_ = 0;
+            sort_later_count_ = 0;
             move_count_ = 0;
             undo_stack_.clear();
+            redo_stack_.clear();
             if (undo_btn_) undo_btn_->setEnabled(false);
+            if (redo_btn_) redo_btn_->setEnabled(false);
             db_.clear_session(source_folder_);
         }
     }
@@ -1321,15 +1475,28 @@ void AdvancedFileTinderDialog::save_grid_config() {
     bool compact = mind_map_view_ ? mind_map_view_->compact_mode() : true;
     int rows = mind_map_view_ ? mind_map_view_->max_rows_per_col() : 6;
     int custom_w = mind_map_view_ ? mind_map_view_->custom_width() : 0;
-    bool full_paths = mind_map_view_ ? mind_map_view_->show_full_paths() : false;
+    int path_mode = mind_map_view_ ? mind_map_view_->path_display_mode() : 0;
     paths.append(QString("__meta__compact=%1").arg(compact ? 1 : 0));
     paths.append(QString("__meta__rows=%1").arg(rows));
     paths.append(QString("__meta__width=%1").arg(custom_w));
-    paths.append(QString("__meta__fullpaths=%1").arg(full_paths ? 1 : 0));
+    paths.append(QString("__meta__fullpaths=%1").arg(path_mode));
+
+    // Session metadata
+    paths.append(QString("__meta__source=%1").arg(source_folder_));
+    paths.append(QString("__meta__file_count=%1").arg(static_cast<int>(files_.size())));
+    paths.append(QString("__meta__timestamp=%1").arg(QDateTime::currentDateTime().toString(Qt::ISODate)));
+
+    // Track which folders are virtual
+    for (const QString& p : folder_model_->get_all_folder_paths()) {
+        if (!QDir(p).exists()) {
+            paths.append(QString("__meta__virtual=%1").arg(p));
+        }
+    }
     
     db_.save_grid_config(source_folder_, name, paths);
+    int folder_count = folder_model_->get_all_folder_paths().size();
     QMessageBox::information(this, "Saved", QString("Grid configuration '%1' saved with %2 folder(s).")
-        .arg(name).arg(paths.size()));
+        .arg(name).arg(folder_count));
 }
 
 void AdvancedFileTinderDialog::load_grid_config() {
@@ -1352,7 +1519,8 @@ void AdvancedFileTinderDialog::load_grid_config() {
     bool meta_compact = true;
     int meta_rows = 6;
     int meta_width = 0;
-    bool meta_fullpaths = false;
+    int meta_fullpaths = 0;
+    QString meta_source;
     QStringList folder_paths;
     for (const QString& p : paths) {
         if (p.startsWith("__meta__")) {
@@ -1361,8 +1529,31 @@ void AdvancedFileTinderDialog::load_grid_config() {
             else if (p.startsWith("__meta__rows=")) meta_rows = p.mid(13).toInt();
             else if (p.startsWith("__meta__width=")) meta_width = p.mid(14).toInt();
             else if (p.startsWith("__meta__fullpaths=")) meta_fullpaths = p.mid(18).toInt();
+            else if (p.startsWith("__meta__source=")) meta_source = p.mid(15);
         } else {
             folder_paths.append(p);
+        }
+    }
+
+    // Warn if config was saved for a different source folder
+    if (!meta_source.isEmpty() && meta_source != source_folder_) {
+        auto reply = QMessageBox::question(this, "Different Source Folder",
+            QString("This grid was saved for a different folder:\n%1\n\n"
+                    "Current folder:\n%2\n\n"
+                    "Load anyway?").arg(meta_source, source_folder_),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (reply != QMessageBox::Yes) return;
+    } else {
+        // Same source folder — offer to save current grid first
+        QStringList current_folders;
+        if (folder_model_) current_folders = folder_model_->get_all_folder_paths();
+        if (!current_folders.isEmpty()) {
+            auto reply = QMessageBox::question(this, "Save Current Grid",
+                "Save current grid before loading?",
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                QMessageBox::Save);
+            if (reply == QMessageBox::Cancel) return;
+            if (reply == QMessageBox::Save) save_grid_config();
         }
     }
     
@@ -1386,7 +1577,7 @@ void AdvancedFileTinderDialog::load_grid_config() {
         mind_map_view_->set_compact_mode(meta_compact);
         mind_map_view_->set_max_rows_per_col(meta_rows);
         mind_map_view_->set_custom_width(meta_width);
-        mind_map_view_->set_show_full_paths(meta_fullpaths);
+        mind_map_view_->set_path_display_mode(meta_fullpaths);
     }
     if (mind_map_view_) mind_map_view_->refresh_layout();
 }

@@ -1,4 +1,5 @@
 #include "AiFileTinderDialog.hpp"
+#include "ManualEditDialog.hpp"
 #include "FolderTreeModel.hpp"
 #include "MindMapView.hpp"
 #include "DatabaseManager.hpp"
@@ -29,8 +30,13 @@
 #include <QMenu>
 #include <QProgressBar>
 #include <QListView>
+#include <QScrollArea>
+#include <QFrame>
+#include <QDoubleSpinBox>
+#include <QStackedWidget>
+#include <QListWidget>
 
-// Batch size for API calls
+// Default batch size for API calls (used in cost estimation)
 static const int kBatchSize = 50;
 // Timeout for API requests (ms) — higher for local LLMs
 static const int kCloudTimeoutMs = 60000;
@@ -52,13 +58,24 @@ AiSetupDialog::AiSetupDialog(const QStringList& existing_folders,
     , file_count_(file_count)
     , fetch_nam_(new QNetworkAccessManager(this)) {
     setWindowTitle("AI Sorting Setup");
-    setMinimumSize(ui::scaling::scaled(480), ui::scaling::scaled(420));
+    auto* scr = QApplication::primaryScreen();
+    QRect scrRect = scr ? scr->availableGeometry() : QRect(0, 0, 1024, 768);
+    setMinimumSize(
+        qMin(ui::scaling::scaled(480), scrRect.width() * 70 / 100),
+        qMin(ui::scaling::scaled(420), scrRect.height() * 70 / 100));
     build_ui();
     load_saved_provider();
 }
 
 void AiSetupDialog::build_ui() {
-    auto* main_layout = new QVBoxLayout(this);
+    auto* outer_layout = new QVBoxLayout(this);
+    outer_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto* scroll = new QScrollArea();
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto* scroll_content = new QWidget();
+    auto* main_layout = new QVBoxLayout(scroll_content);
     main_layout->setSpacing(8);
     main_layout->setContentsMargins(14, 14, 14, 14);
 
@@ -109,11 +126,25 @@ void AiSetupDialog::build_ui() {
     ep_row->addWidget(endpoint_edit_, 1);
     prov_layout->addLayout(ep_row);
 
+    connect(endpoint_edit_, &QLineEdit::editingFinished, this, [this]() {
+        QString text = endpoint_edit_->text().trimmed();
+        if (!text.isEmpty()) {
+            QUrl url(text);
+            if (!url.isValid() || url.scheme().isEmpty()) {
+                endpoint_edit_->setStyleSheet("QLineEdit { border: 1px solid #e74c3c; }");
+                endpoint_edit_->setToolTip("Invalid URL: must start with http:// or https://");
+            } else {
+                endpoint_edit_->setStyleSheet("");
+                endpoint_edit_->setToolTip("");
+            }
+        }
+    });
+
     auto* model_row = new QHBoxLayout();
     model_row->addWidget(new QLabel("Model:"));
     model_combo_ = new QComboBox();
     model_combo_->setEditable(true);
-    model_combo_->setInsertPolicy(QComboBox::NoInsert);
+    model_combo_->setInsertPolicy(QComboBox::InsertAtBottom);
     model_combo_->setPlaceholderText("Select or type a model name");
     model_row->addWidget(model_combo_, 1);
     auto* fetch_btn = new QPushButton("Fetch");
@@ -124,7 +155,75 @@ void AiSetupDialog::build_ui() {
         fetch_models(provider_combo_->currentText());
     });
     model_row->addWidget(fetch_btn);
+    auto* test_btn = new QPushButton("Test");
+    test_btn->setFixedWidth(ui::scaling::scaled(50));
+    test_btn->setToolTip("Test the API connection with a simple request");
+    test_btn->setStyleSheet("QPushButton { padding: 3px 8px; background-color: #27ae60; color: white; border-radius: 3px; }"
+                           "QPushButton:hover { background-color: #2ecc71; }");
+    connect(test_btn, &QPushButton::clicked, this, [this, test_btn]() {
+        QString api_key = api_key_edit_->text().trimmed();
+        QString endpoint = endpoint_edit_->text().trimmed();
+        QString model = model_combo_->currentText().trimmed();
+        QString provider = provider_combo_->currentText();
+        bool is_local = provider.contains("Ollama") || provider.contains("LM Studio") || provider.contains("Local");
+
+        if (!is_local && api_key.isEmpty()) {
+            QMessageBox::warning(this, "Test Failed", "API key is required for cloud providers.");
+            return;
+        }
+        if (endpoint.isEmpty()) {
+            QMessageBox::warning(this, "Test Failed", "Endpoint URL is required.");
+            return;
+        }
+
+        // Build a minimal test request
+        QUrl url(endpoint);
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        request.setTransferTimeout(10000);
+        if (!is_local && !api_key.isEmpty()) {
+            if (provider == "Anthropic") {
+                request.setRawHeader("x-api-key", api_key.toUtf8());
+                request.setRawHeader("anthropic-version", "2023-06-01");
+            } else if (provider != "Google Gemini") {
+                request.setRawHeader("Authorization", QByteArray("Bearer ") + api_key.toUtf8());
+            }
+        }
+
+        QJsonObject body;
+        body["model"] = model;
+        body["max_tokens"] = 10;
+        QJsonArray messages;
+        QJsonObject msg;
+        msg["role"] = "user";
+        msg["content"] = "Say OK";
+        messages.append(msg);
+        body["messages"] = messages;
+
+        test_btn->setEnabled(false);
+        test_btn->setText("...");
+        QNetworkReply* reply = fetch_nam_->post(request, QJsonDocument(body).toJson());
+        connect(reply, &QNetworkReply::finished, this, [this, reply, test_btn]() {
+            test_btn->setEnabled(true);
+            test_btn->setText("Test");
+            reply->deleteLater();
+            int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            if (reply->error() == QNetworkReply::NoError || (status >= 200 && status < 300)) {
+                QMessageBox::information(this, "Connection OK", 
+                    QString("API connection successful (HTTP %1).").arg(status));
+            } else {
+                QMessageBox::warning(this, "Connection Failed",
+                    QString("API returned HTTP %1.\n\n%2").arg(status).arg(reply->errorString()));
+            }
+        });
+    });
+    model_row->addWidget(test_btn);
     prov_layout->addLayout(model_row);
+
+    auto* model_hint = new QLabel("Recommended: use the cheapest model (gpt-4o-mini, claude-3-haiku, gemini-1.5-flash, llama-3.1-8b) for file sorting.");
+    model_hint->setStyleSheet("color: #7f8c8d; font-size: 9px;");
+    model_hint->setWordWrap(true);
+    prov_layout->addWidget(model_hint);
 
     // Recalculate cost when model name changes (free models suppress warning)
     connect(model_combo_, &QComboBox::currentTextChanged, this, [this]() { update_cost_estimate(); });
@@ -234,6 +333,21 @@ void AiSetupDialog::build_ui() {
     depth_row->addStretch();
     cat_layout->addLayout(depth_row);
 
+    // Category limit option
+    auto* limit_row = new QHBoxLayout();
+    category_limit_check_ = new QCheckBox("Limit categories");
+    category_limit_check_->setToolTip("Cap the number of categories AI will create");
+    limit_row->addWidget(category_limit_check_);
+    category_limit_spin_ = new QSpinBox();
+    category_limit_spin_->setRange(2, 50);
+    category_limit_spin_->setValue(10);
+    category_limit_spin_->setEnabled(false);
+    category_limit_spin_->setToolTip("Maximum number of categories");
+    connect(category_limit_check_, &QCheckBox::toggled, category_limit_spin_, &QSpinBox::setEnabled);
+    limit_row->addWidget(category_limit_spin_);
+    limit_row->addStretch();
+    cat_layout->addLayout(limit_row);
+
     main_layout->addWidget(cat_group);
 
     // ── Purpose (optional) ──
@@ -242,30 +356,35 @@ void AiSetupDialog::build_ui() {
     auto* purpose_layout = new QVBoxLayout(purpose_group);
 
     purpose_edit_ = new QTextEdit();
-    purpose_edit_->setMaximumHeight(45);
+    purpose_edit_->setMaximumHeight(70);
     purpose_edit_->setPlaceholderText("e.g. 'This is my Downloads folder, organize by project and file type'");
     purpose_edit_->setStyleSheet("QTextEdit { background: #2d2d2d; color: #ecf0f1; border: 1px solid #4a6078; }");
     purpose_layout->addWidget(purpose_edit_);
 
     main_layout->addWidget(purpose_group);
 
-    // ── Confidence threshold (optional) ──
-    auto* conf_row = new QHBoxLayout();
-    conf_row->addWidget(new QLabel("Min. confidence threshold:"));
-    confidence_spin_ = new QSpinBox();
-    confidence_spin_->setRange(0, 90);
-    confidence_spin_->setValue(0);
-    confidence_spin_->setSuffix("%");
-    confidence_spin_->setToolTip("Set to 0 to show all suggestions. Higher values filter out low-confidence results.");
-    conf_row->addWidget(confidence_spin_);
-    conf_row->addStretch();
-    main_layout->addLayout(conf_row);
+    auto* budget_row = new QHBoxLayout();
+    budget_row->addWidget(new QLabel("Max budget:"));
+    auto* budget_spin = new QDoubleSpinBox();
+    budget_spin->setRange(0.0, 100.0);
+    budget_spin->setValue(0.0);
+    budget_spin->setPrefix("$");
+    budget_spin->setDecimals(2);
+    budget_spin->setSingleStep(0.10);
+    budget_spin->setToolTip("Set to $0.00 for no limit. Analysis will stop if estimated cost exceeds this.");
+    budget_row->addWidget(budget_spin);
+    budget_row->addStretch();
+    main_layout->addLayout(budget_row);
 
     // ── Cost estimate ──
     cost_label_ = new QLabel("");
     cost_label_->setStyleSheet("color: #f39c12; font-size: 11px;");
     cost_label_->setWordWrap(true);
     main_layout->addWidget(cost_label_);
+    auto* price_note = new QLabel("(Token prices are estimates and may change. Check your provider dashboard for exact costs.)");
+    price_note->setStyleSheet("color: #7f8c8d; font-size: 8px;");
+    price_note->setWordWrap(true);
+    main_layout->addWidget(price_note);
     update_cost_estimate();
 
     main_layout->addStretch();
@@ -305,7 +424,9 @@ void AiSetupDialog::build_ui() {
     });
     btn_layout->addWidget(ok_btn);
 
-    main_layout->addLayout(btn_layout);
+    scroll->setWidget(scroll_content);
+    outer_layout->addWidget(scroll, 1);
+    outer_layout->addLayout(btn_layout);
 }
 
 void AiSetupDialog::load_saved_provider() {
@@ -529,7 +650,14 @@ AiProviderConfig AiSetupDialog::provider_config() const {
 }
 
 int AiSetupDialog::confidence_threshold() const {
-    return confidence_spin_->value();
+    return 0;
+}
+
+int AiSetupDialog::category_limit() const {
+    if (category_limit_check_ && category_limit_check_->isChecked()) {
+        return category_limit_spin_->value();
+    }
+    return 0;
 }
 
 // ============================================================
@@ -538,8 +666,10 @@ int AiSetupDialog::confidence_threshold() const {
 
 AiFileTinderDialog::AiFileTinderDialog(const QString& source_folder,
                                        DatabaseManager& db,
-                                       QWidget* parent)
-    : AdvancedFileTinderDialog(source_folder, db, parent)
+                                       QWidget* parent,
+                                       const QStringList& additional_sources,
+                                       FolderTreeModel* shared_folder_model)
+    : AdvancedFileTinderDialog(source_folder, db, parent, additional_sources, shared_folder_model)
     , sort_mode_(AiSortMode::Auto)
     , category_mode_(AiCategoryMode::KeepExisting)
     , semi_count_(3)
@@ -548,7 +678,8 @@ AiFileTinderDialog::AiFileTinderDialog(const QString& source_folder,
     , rate_limit_timer_(new QTimer(this))
     , requests_this_minute_(0) {
 
-    setWindowTitle(QString("File Tinder - AI Mode \xe2\x80\x94 %1").arg(QFileInfo(source_folder).fileName()));
+    setWindowTitle(QString("AI Mode \xe2\x80\x94 %1").arg(QFileInfo(source_folder).fileName()));
+    mode_name_ = "AI";
 
     rate_limit_timer_->setInterval(60000);
     connect(rate_limit_timer_, &QTimer::timeout, this, &AiFileTinderDialog::reset_rate_limit);
@@ -558,6 +689,11 @@ AiFileTinderDialog::~AiFileTinderDialog() = default;
 
 void AiFileTinderDialog::initialize() {
     AdvancedFileTinderDialog::initialize();
+
+    // Hide Quick Access panel in AI mode — AI Suggestions replaces it
+    if (quick_access_panel_) {
+        quick_access_panel_->setVisible(false);
+    }
 
     // Replace the "Basic Mode" switch button with a mode menu for AI mode
     if (switch_mode_btn_) {
@@ -596,14 +732,14 @@ void AiFileTinderDialog::initialize() {
             }
         });
 
-        // "Re-run AI" button
-        rerun_ai_btn_ = new QPushButton("Re-run AI");
+        // "AI Actions" button
+        rerun_ai_btn_ = new QPushButton("AI Actions");
         rerun_ai_btn_->setStyleSheet(
             "QPushButton { padding: 5px 12px; background-color: #3498db; "
             "border-radius: 4px; color: white; font-size: 11px; }"
             "QPushButton:hover { background-color: #2980b9; }"
         );
-        rerun_ai_btn_->setToolTip("Re-run AI analysis on remaining unsorted files or all files");
+        rerun_ai_btn_->setToolTip("Configure AI provider in 'AI Setup' to enable re-running");
         rerun_ai_btn_->setEnabled(false);
         connect(rerun_ai_btn_, &QPushButton::clicked, this, [this]() {
             if (!ai_configured_) {
@@ -612,10 +748,10 @@ void AiFileTinderDialog::initialize() {
                 return;
             }
             QMenu menu;
-            auto* remaining_action = menu.addAction("Remaining unsorted files only");
-            auto* all_action = menu.addAction("All files (overwrite existing decisions)");
+            auto* remaining_action = menu.addAction("Analyze remaining files");
+            auto* all_action = menu.addAction("Re-analyze all files");
             menu.addSeparator();
-            auto* recat_action = menu.addAction("Re-categorize (re-sort based on changed folders)");
+            auto* recat_action = menu.addAction("Generate new categories");
             recat_action->setToolTip("Re-analyze already-sorted files that might better fit new/changed categories");
 
             auto* chosen = menu.exec(rerun_ai_btn_->mapToGlobal(QPoint(0, rerun_ai_btn_->height())));
@@ -666,13 +802,51 @@ void AiFileTinderDialog::initialize() {
                 if (title_layout) {
                     title_layout->insertWidget(title_layout->count() - 1, ai_setup_btn_);
                     title_layout->insertWidget(title_layout->count() - 1, rerun_ai_btn_);
+
+                    ai_glow_toggle_ = new QCheckBox("Glow AI");
+                    ai_glow_toggle_->setChecked(true);
+                    ai_glow_toggle_->setToolTip("Highlight AI-suggested folders with a gold glow border in the grid");
+                    ai_glow_toggle_->setStyleSheet("QCheckBox { color: #f1c40f; font-size: 10px; }");
+                    connect(ai_glow_toggle_, &QCheckBox::toggled, this, [this](bool checked) {
+                        if (!checked) {
+                            if (mind_map_view_) mind_map_view_->clear_highlighted_paths();
+                        } else {
+                            // Re-apply highlights for current file
+                            if (!highlighted_folders_.isEmpty() && mind_map_view_) {
+                                mind_map_view_->set_highlighted_paths(highlighted_folders_);
+                            }
+                        }
+                    });
+                    title_layout->insertWidget(title_layout->count() - 1, ai_glow_toggle_);
+
+                    ai_reasoning_toggle_ = new QCheckBox("AI Reasoning");
+                    ai_reasoning_toggle_->setChecked(true);
+                    ai_reasoning_toggle_->setToolTip("Show AI reasoning text for each file");
+                    ai_reasoning_toggle_->setStyleSheet("QCheckBox { color: #95a5a6; font-size: 10px; }");
+                    connect(ai_reasoning_toggle_, &QCheckBox::toggled, this, [this](bool checked) {
+                        if (ai_reasoning_label_) {
+                            if (!checked) {
+                                ai_reasoning_label_->setVisible(false);
+                            } else {
+                                // Re-show reasoning for current file if available
+                                int file_idx = get_current_file_index();
+                                for (const auto& s : suggestions_) {
+                                    if (s.file_index == file_idx && !s.reasoning.isEmpty()) {
+                                        ai_reasoning_label_->setVisible(true);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    title_layout->insertWidget(title_layout->count() - 1, ai_reasoning_toggle_);
                 }
             }
         }
 
         // Create separate "AI Suggestions" panel below the grid
         ai_suggestions_panel_ = new QWidget();
-        ai_suggestions_panel_->setVisible(false);
+        ai_suggestions_panel_->setVisible(true);
         auto* ai_sugg_layout = new QHBoxLayout(ai_suggestions_panel_);
         ai_sugg_layout->setContentsMargins(0, 0, 0, 0);
         auto* ai_sugg_label = new QLabel("AI Suggestions:");
@@ -697,7 +871,45 @@ void AiFileTinderDialog::initialize() {
                 on_folder_clicked_from_ai(folder_path);
             }
         });
+        // Show auto-mode hint when not in semi mode
+        if (sort_mode_ == AiSortMode::Auto) {
+            auto* hint_item = new QListWidgetItem("Switch to Semi-Auto to use AI Suggestions");
+            hint_item->setForeground(QColor("#7f8c8d"));
+            hint_item->setFlags(hint_item->flags() & ~Qt::ItemIsSelectable);
+            ai_suggestions_list_->addItem(hint_item);
+        }
         ai_sugg_layout->addWidget(ai_suggestions_list_, 1);
+
+        // "Other" button to pick any folder from the grid
+        ai_other_btn_ = new QPushButton("Other");
+        ai_other_btn_->setFixedHeight(28);
+        ai_other_btn_->setMaximumWidth(60);
+        ai_other_btn_->setToolTip("Choose a different folder from the grid");
+        ai_other_btn_->setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 2px 8px; "
+            "background-color: #34495e; border-radius: 3px; color: #bdc3c7; }"
+            "QPushButton:hover { background-color: #3d566e; }"
+        );
+        connect(ai_other_btn_, &QPushButton::clicked, this, [this]() {
+            QStringList all_folders;
+            if (folder_model_) {
+                all_folders = folder_model_->get_all_folder_paths();
+            }
+            if (all_folders.isEmpty()) return;
+            QMenu menu(this);
+            for (const QString& fp : all_folders) {
+                QString label = QFileInfo(fp).fileName();
+                if (label.isEmpty()) label = fp;
+                auto* action = menu.addAction(label);
+                action->setData(fp);
+                action->setToolTip(fp);
+            }
+            auto* chosen = menu.exec(ai_other_btn_->mapToGlobal(QPoint(0, ai_other_btn_->height())));
+            if (chosen && chosen->data().isValid()) {
+                on_folder_clicked_from_ai(chosen->data().toString());
+            }
+        });
+        ai_sugg_layout->addWidget(ai_other_btn_);
 
         // Insert after the mind map / before the quick access panel
         if (main_layout->count() > 2) {
@@ -706,18 +918,11 @@ void AiFileTinderDialog::initialize() {
             main_layout->addWidget(ai_suggestions_panel_);
         }
 
-        // AI Reasoning label — shows why the AI picked these folders
         ai_reasoning_label_ = new QLabel();
-        ai_reasoning_label_->setStyleSheet(
-            "color: #95a5a6; font-size: 10px; padding: 4px 8px; "
-            "background-color: #2c3e50; border-radius: 3px;");
+        ai_reasoning_label_->setStyleSheet("color: #95a5a6; font-size: 10px; font-style: italic; padding: 2px 4px;");
         ai_reasoning_label_->setWordWrap(true);
         ai_reasoning_label_->setVisible(false);
-        if (main_layout->count() > 2) {
-            main_layout->insertWidget(main_layout->count() - 2, ai_reasoning_label_);
-        } else {
-            main_layout->addWidget(ai_reasoning_label_);
-        }
+        ai_sugg_layout->addWidget(ai_reasoning_label_);
     }
 }
 
@@ -737,6 +942,7 @@ bool AiFileTinderDialog::show_ai_setup() {
     semi_count_ = setup.semi_mode_count();
     category_mode_ = setup.category_mode();
     category_depth_ = setup.category_depth();
+    category_limit_ = setup.category_limit();
     folder_purpose_ = setup.folder_purpose();
     provider_config_ = setup.provider_config();
     confidence_threshold_ = setup.confidence_threshold();
@@ -764,6 +970,28 @@ bool AiFileTinderDialog::show_ai_setup() {
     return true;
 }
 
+int AiFileTinderDialog::calculate_batch_size(int folder_count, int total_files) const {
+    // Base batch size
+    int base = 50;
+
+    // Reduce for large folder counts (more context per request)
+    if (folder_count > 30) base = 30;
+    else if (folder_count > 15) base = 40;
+
+    // Local models can handle larger batches (no token cost)
+    if (provider_config_.is_local) base = qMin(base + 20, 100);
+
+    // For very small file sets, use a single batch
+    if (total_files <= base) return total_files;
+
+    // For free-tier APIs with strict rate limits, use smaller batches
+    if (is_free_tier_ && provider_config_.rate_limit_rpm <= 30) {
+        base = qMin(base, 25);
+    }
+
+    return base;
+}
+
 void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
     if (files_.empty()) {
         QMessageBox::information(this, "No Files", "No files to analyze.");
@@ -778,7 +1006,7 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
             }
             if (file.decision == "keep") keep_count_--;
             else if (file.decision == "delete") delete_count_--;
-            else if (file.decision == "skip") skip_count_--;
+            else if (file.decision == "sort_later") sort_later_count_--;
             else if (file.decision == "move") move_count_--;
             file.decision = "pending";
             file.destination_folder.clear();
@@ -814,14 +1042,21 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
         available_folders.prepend(source_folder_);
     }
 
-    // Calculate batches
+    // Calculate batches with dynamic sizing
     int total_files = static_cast<int>(file_descriptions.size());
-    int total_batches = (total_files + kBatchSize - 1) / kBatchSize;
+    int batch_size = calculate_batch_size(static_cast<int>(available_folders.size()), total_files);
+    int total_batches = (total_files + batch_size - 1) / batch_size;
 
     // Progress dialog with real-time log
     QDialog progress_dialog(this);
     progress_dialog.setWindowTitle("AI Analysis");
-    progress_dialog.setMinimumSize(ui::scaling::scaled(550), ui::scaling::scaled(400));
+    {
+        auto* scr = QApplication::primaryScreen();
+        QRect sr = scr ? scr->availableGeometry() : QRect(0, 0, 1024, 768);
+        progress_dialog.setMinimumSize(
+            qMin(ui::scaling::scaled(550), sr.width() * 70 / 100),
+            qMin(ui::scaling::scaled(400), sr.height() * 65 / 100));
+    }
     auto* prog_layout = new QVBoxLayout(&progress_dialog);
 
     auto* prog_header = new QLabel(QString("Analyzing %1 files...").arg(total_files));
@@ -831,7 +1066,17 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
     auto* prog_bar = new QProgressBar();
     prog_bar->setRange(0, total_batches);
     prog_bar->setValue(0);
+    prog_bar->setFormat("Batch %v / %m");
     prog_layout->addWidget(prog_bar);
+
+    auto* file_prog_bar = new QProgressBar();
+    file_prog_bar->setRange(0, total_files);
+    file_prog_bar->setValue(0);
+    file_prog_bar->setFormat("Files classified: %v / %m (%p%)");
+    file_prog_bar->setStyleSheet(
+        "QProgressBar { border: 1px solid #3c3c3c; border-radius: 3px; text-align: center; background-color: #2d2d2d; }"
+        "QProgressBar::chunk { background-color: #27ae60; }");
+    prog_layout->addWidget(file_prog_bar);
 
     auto* log_browser = new QTextBrowser();
     log_browser->setStyleSheet("QTextBrowser { background: #1a1a2e; color: #e0e0e0; font-family: monospace; font-size: 11px; }");
@@ -889,9 +1134,9 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
     int files_classified = 0;
 
     for (int batch = 0; batch < total_batches && !cancelled; ++batch) {
-        int start = batch * kBatchSize;
-        int end = qMin(start + kBatchSize, total_files);
-        int batch_size = end - start;
+        int start = batch * batch_size;
+        int end = qMin(start + batch_size, total_files);
+        int current_batch_size = end - start;
 
         log(QString("Batch %1/%2 \xe2\x80\x94 analyzing files %3-%4...")
             .arg(batch + 1).arg(total_batches).arg(start + 1).arg(end));
@@ -946,19 +1191,31 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
         if (!error.isEmpty()) {
             log(QString("ERROR: Batch %1/%2 failed: %3").arg(batch + 1).arg(total_batches).arg(error));
 
-            // Error recovery: let user choose
+            // Error recovery: let user choose (with Retry option for API overloads)
             progress_dialog.hide();
-            auto reply = QMessageBox::question(this, "AI Analysis Interrupted",
-                QString("AI analysis interrupted after %1/%2 files.\n\n"
-                        "%3 files remain unclassified.\n\n"
-                        "What would you like to do?")
-                    .arg(files_classified).arg(total_files).arg(total_files - files_classified),
-                QMessageBox::Abort | QMessageBox::Ignore,
-                QMessageBox::Ignore);
+            QMessageBox err_box(this);
+            err_box.setWindowTitle("AI Analysis Interrupted");
+            err_box.setText(QString("AI analysis interrupted after %1/%2 files.\n\n"
+                        "%3 files remain unclassified.")
+                    .arg(files_classified).arg(total_files).arg(total_files - files_classified));
+            err_box.setInformativeText("Retry will re-attempt the failed batch. Continue will proceed with partial results. Abort will cancel the analysis.");
+            auto* retry_btn = err_box.addButton("Retry", QMessageBox::AcceptRole);
+            retry_btn->setStyleSheet("QPushButton { background-color: #3498db; color: white; padding: 4px 12px; border-radius: 3px; }");
+            err_box.addButton("Continue with partial results", QMessageBox::RejectRole);
+            auto* abort_btn = err_box.addButton(QMessageBox::Abort);
+            err_box.setDefaultButton(retry_btn);
+            err_box.exec();
 
-            if (reply == QMessageBox::Abort) {
+            if (err_box.clickedButton() == abort_btn) {
                 suggestions_.clear();
                 return;
+            }
+            if (err_box.clickedButton() == retry_btn) {
+                batch--;  // Retry the same batch
+                log("Retrying failed batch...");
+                progress_dialog.show();
+                QApplication::processEvents();
+                continue;
             }
             // Continue to review with partial results
             break;
@@ -970,12 +1227,13 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
         auto batch_suggestions = parse_ai_response(response);
         int parsed_count = static_cast<int>(batch_suggestions.size());
         files_classified += parsed_count;
+        file_prog_bar->setValue(files_classified);
 
         // If partial parse failure, retry once
-        if (parsed_count < batch_size) {
-            int failed = batch_size - parsed_count;
+        if (parsed_count < current_batch_size) {
+            int failed = current_batch_size - parsed_count;
             log(QString("%1/%2 files parsed. Retrying %3 failed...")
-                .arg(parsed_count).arg(batch_size).arg(failed));
+                .arg(parsed_count).arg(current_batch_size).arg(failed));
 
             // Build a retry prompt with just the failed file indices
             QSet<int> parsed_indices;
@@ -1000,6 +1258,7 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
                         batch_suggestions.push_back(s);
                     }
                     files_classified += static_cast<int>(retry_results.size());
+                    file_prog_bar->setValue(files_classified);
                     log(QString("  Retry recovered %1 more files").arg(retry_results.size()));
                 }
             }
@@ -1034,51 +1293,20 @@ void AiFileTinderDialog::run_ai_analysis(bool remaining_only) {
             }
         }
 
-        // Let user review proposed categories before applying
+        // Let user review proposed categories using ManualEditDialog
         if (!new_folders.isEmpty()) {
-            QDialog review_dlg(this);
-            review_dlg.setWindowTitle("Review AI Categories");
-            review_dlg.setMinimumSize(ui::scaling::scaled(500), ui::scaling::scaled(400));
-            auto* rv_layout = new QVBoxLayout(&review_dlg);
-
-            auto* rv_header = new QLabel(QString("AI proposed %1 new folder(s). Edit, remove, or add categories:")
-                .arg(new_folders.size()));
-            rv_header->setStyleSheet("font-weight: bold; color: #3498db;");
-            rv_header->setWordWrap(true);
-            rv_layout->addWidget(rv_header);
-
-            auto* folder_edit = new QTextEdit();
             QStringList sorted_folders = new_folders.values();
             sorted_folders.sort();
-            folder_edit->setPlainText(sorted_folders.join("\n"));
-            folder_edit->setStyleSheet("QTextEdit { background: #1a1a2e; color: #e0e0e0; font-family: monospace; font-size: 11px; }");
-            rv_layout->addWidget(folder_edit, 1);
 
-            auto* rv_note = new QLabel("One folder path per line. Empty lines will be ignored.");
-            rv_note->setStyleSheet("color: #95a5a6; font-size: 10px;");
-            rv_layout->addWidget(rv_note);
-
-            auto* rv_btns = new QHBoxLayout();
-            auto* rv_cancel = new QPushButton("Cancel (use as-is)");
-            connect(rv_cancel, &QPushButton::clicked, &review_dlg, &QDialog::reject);
-            rv_btns->addWidget(rv_cancel);
-            rv_btns->addStretch();
-            auto* rv_ok = new QPushButton("Apply Changes");
-            rv_ok->setStyleSheet("QPushButton { background-color: #3498db; color: white; padding: 6px 16px; border-radius: 4px; }");
-            connect(rv_ok, &QPushButton::clicked, &review_dlg, &QDialog::accept);
-            rv_btns->addWidget(rv_ok);
-            rv_layout->addLayout(rv_btns);
+            ManualEditDialog review_dlg(source_folder_, sorted_folders, this);
+            review_dlg.setWindowTitle("Review AI Categories");
 
             if (review_dlg.exec() == QDialog::Accepted) {
                 new_folders.clear();
-                QStringList lines = folder_edit->toPlainText().split('\n', Qt::SkipEmptyParts);
-                for (const QString& line : lines) {
-                    QString trimmed = line.trimmed();
-                    if (!trimmed.isEmpty() && trimmed != source_folder_) {
-                        if (!trimmed.startsWith(source_folder_)) {
-                            trimmed = QDir::cleanPath(source_folder_ + "/" + trimmed);
-                        }
-                        new_folders.insert(trimmed);
+                QStringList result = review_dlg.get_folders();
+                for (const QString& f : result) {
+                    if (!f.isEmpty() && f != source_folder_) {
+                        new_folders.insert(f);
                     }
                 }
             }
@@ -1144,6 +1372,10 @@ QString AiFileTinderDialog::build_analysis_prompt(const QStringList& file_descri
             prompt += QString("Maximum subcategory depth: %1 levels. ").arg(category_depth_);
             prompt += "Create as many categories as needed for accurate organization.\n";
             break;
+    }
+
+    if (category_limit_ > 0) {
+        prompt += QString("Create at most %1 categories.\n").arg(category_limit_);
     }
 
     if (!folder_purpose_.isEmpty()) {
@@ -1305,7 +1537,7 @@ QString AiFileTinderDialog::send_api_request(const QString& prompt, QString& err
         }
 
         // Success — decay 429 counter (gradual recovery instead of hard reset)
-        if (consecutive_429s_ > 0) consecutive_429s_--;
+        consecutive_429s_ = qMax(0, consecutive_429s_ - 1);
 
         QByteArray response_data = reply->readAll();
         reply->deleteLater();
@@ -1458,10 +1690,12 @@ void AiFileTinderDialog::apply_auto_suggestions() {
 
         if (dest == source_folder_) {
             file.decision = "keep";
+            file.decided_in_mode = mode_name_;
             keep_count_++;
         } else {
             file.decision = "move";
             file.destination_folder = dest;
+            file.decided_in_mode = mode_name_;
             move_count_++;
             if (folder_model_) folder_model_->assign_file_to_folder(dest);
         }
@@ -1495,7 +1729,7 @@ void AiFileTinderDialog::show_current_file() {
                     highlight_suggested_folders(s.suggested_folders);
                     // Show reasoning
                     if (ai_reasoning_label_) {
-                        if (!s.reasoning.isEmpty()) {
+                        if (!s.reasoning.isEmpty() && is_reasoning_visible()) {
                             ai_reasoning_label_->setText("AI: " + s.reasoning);
                             ai_reasoning_label_->setVisible(true);
                         } else {
@@ -1524,6 +1758,27 @@ void AiFileTinderDialog::show_current_file() {
             }
         }
     }
+
+    // Show AI reasoning for current file (all modes)
+    if (ai_reasoning_label_) {
+        int file_idx = get_current_file_index();
+        bool found = false;
+        for (const auto& s : suggestions_) {
+            if (s.file_index == file_idx && !s.reasoning.isEmpty()) {
+                ai_reasoning_label_->setText(QString("AI: %1").arg(s.reasoning));
+                ai_reasoning_label_->setVisible(is_reasoning_visible());
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ai_reasoning_label_->setVisible(false);
+        }
+    }
+}
+
+bool AiFileTinderDialog::is_reasoning_visible() const {
+    return !ai_reasoning_toggle_ || ai_reasoning_toggle_->isChecked();
 }
 
 void AiFileTinderDialog::highlight_suggested_folders(const QStringList& folders) {
@@ -1532,6 +1787,11 @@ void AiFileTinderDialog::highlight_suggested_folders(const QStringList& folders)
     // Highlight best match in the mind map
     if (mind_map_view_ && !folders.isEmpty()) {
         mind_map_view_->set_selected_folder(folders.first());
+    }
+
+    // Apply glow borders on grid nodes if toggle is on
+    if (mind_map_view_ && (!ai_glow_toggle_ || ai_glow_toggle_->isChecked())) {
+        mind_map_view_->set_highlighted_paths(folders);
     }
 
     // Populate the AI Suggestions panel (separate from Quick Access)
@@ -1555,11 +1815,18 @@ void AiFileTinderDialog::highlight_suggested_folders(const QStringList& folders)
 
 void AiFileTinderDialog::clear_folder_highlights() {
     highlighted_folders_.clear();
+    if (mind_map_view_) {
+        mind_map_view_->clear_highlighted_paths();
+    }
     if (ai_suggestions_list_) {
         ai_suggestions_list_->clear();
-    }
-    if (ai_suggestions_panel_) {
-        ai_suggestions_panel_->setVisible(false);
+        // Keep panel visible with a hint when in auto mode
+        if (sort_mode_ == AiSortMode::Auto) {
+            auto* hint_item = new QListWidgetItem("Switch to Semi-Auto to use AI Suggestions");
+            hint_item->setForeground(QColor("#7f8c8d"));
+            hint_item->setFlags(hint_item->flags() & ~Qt::ItemIsSelectable);
+            ai_suggestions_list_->addItem(hint_item);
+        }
     }
     if (ai_reasoning_label_) {
         ai_reasoning_label_->setVisible(false);
@@ -1595,6 +1862,7 @@ void AiFileTinderDialog::on_folder_clicked_from_ai(const QString& folder_path) {
 
     file.decision = "move";
     file.destination_folder = folder_path;
+    file.decided_in_mode = mode_name_;
     move_count_++;
 
     if (folder_model_) folder_model_->assign_file_to_folder(folder_path);

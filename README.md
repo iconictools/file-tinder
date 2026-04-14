@@ -1,44 +1,108 @@
 # File Tinder
 
-A file organization tool with three possible interfaces for quickly sorting and organizing files. For ADHD people who need to get things done but shutdown to a messy environment.
-Made with a dream, Github Copilot, executive dysfunction and an obsessive attention to detail.
+A file organization tool with three sorting modes (Basic, Advanced, AI) for quickly sorting and organizing files. Designed for people who need to get things done but shut down in messy environments.
 
+Made with a dream, GitHub Copilot, executive dysfunction and an obsessive attention to detail.
 
 ![File Tinder](https://img.shields.io/badge/Qt-6.x-green) ![C++17](https://img.shields.io/badge/C%2B%2B-17-blue) ![License](https://img.shields.io/badge/License-MIT-yellow)
+
+## Why File Tinder?
+
+Organizing files is tedious. You open a folder with hundreds of files and immediately feel overwhelmed. File Tinder turns it into a simple, one-file-at-a-time decision process — like swiping on Tinder, but for your files. Three modes let you choose how deep you want to go:
+
+- **Basic Mode**: Swipe right to keep, left to delete, down to sort later. That's it.
+- **Advanced Mode**: A visual grid of destination folders. Click one to move the file there. Create folders on the fly.
+- **AI Mode**: Connect to any OpenAI-compatible API and let AI suggest where your files should go. Review the suggestions or let it run fully automatic.
+
+All three modes share the same session state, so you can switch between them freely.
 
 ## Features
 
 ### Basic Mode
-- **Swipe-style sorting**: Use arrow keys or buttons to quickly categorize files
+- **Swipe-style sorting**: Arrow keys or buttons to quickly categorize files
   - → **Keep**: Keep file in original location
   - ← **Delete**: Mark file for deletion
-  - ↓ **Skip**: Skip/ignore file
-  - ↑ **Back**: Go back to previous file
-- **Undo**: Revert your last action with Z
-- **Image Preview**: Open images in a separate zoomable window with P
-- **Filtering**: Filter by file type (Images, Videos, Audio, Documents, Archives, Other, Folders Only) or specify custom extensions
-- **Sorting**: Order files by Name, Size, Type, or Date Modified (ascending/descending)
-- **Progress tracking**: Visual progress bar and statistics
+  - ↓ **Sort Later**: Move file to end of list (see it again later)
+  - **Z/Y**: Undo/Redo last action
+- **Image preview**: Opens images in a separate zoomable window (P key)
+- **File type filtering**: Images, Videos, Audio, Documents, Archives, Other, Folders Only, or custom extensions
+- **Subfolder depth control**: Spinner (0–5) to include files from subfolders
+- **Multi-field sorting**: By Name, Size, Type, or Date Modified (ascending/descending)
+- **Progress tracking**: Visual progress bar showing files sorted vs. remaining
 - **Session persistence**: Resume sorting sessions across application restarts
+- **Duplicate detection**: Automatic SHA-256 hash detection with "Keep Newest" bulk action
+- **Search**: Ctrl+F to search files by name
 
 ### Advanced Mode
-- **Visual Mind Map**: Clickable folder nodes displayed as a scrollable tree
-- **One-click file assignment**: Click any folder node to instantly move the current file there
-- **Dynamic folder creation**: Create new or add existing folders on-the-fly via the "+" button
-- **Quick Access bar**: Pin up to 10 frequently used folders for one-click access (keys 1-0)
-- **Shared filtering & sorting**: Same filter/sort capabilities as Basic Mode
-- **Keep, Delete, Skip, Undo**: Full file action controls below the mind map
+- **Visual folder grid**: Clickable folder buttons in a scrollable grid layout
+- **One-click file assignment**: Click any folder to move the current file there
+- **Dynamic folder management**: Create new or add existing folders via [+], right-click for rename/color/delete
+- **Manual Edit dialog**: Batch editor for grid folders — tree/text toggle, middle-click delete, add folders/subfolders
+- **Quick Access bar**: Pin up to 10 folders for one-click access (keys 1-0)
+- **Grid customization**: Height spinner, auto width, 3-level path display (Off/Relative/Full), adjustable button width, row count control, visual hierarchy toggle
+- **Grid configurations**: Save/load named grid layouts for reuse across sessions
+- **Folder coloring**: 8 preset colors via right-click context menu
+- **Keyboard navigation**: Tab enters grid navigation, arrow keys move between folders, Space to assign
+- **Sort dropdown**: Manual / A-Z / By Count ordering for grid folders
+- **Expand grid**: Fullscreen toggle for the folder grid
+- **Node swapping**: Drag folders to reorder within the grid
 
-### Review & Execute
-- **Batch operations**: Review all decisions before execution
-- **Summary view**: See file counts and sizes per destination
-- **Safe deletion**: Files are moved to trash by default
-- **Virtual folder creation**: Folders created in the mind map are auto-created during execution
-- **Error handling**: Detailed error reporting for any issues
+### AI Mode
+- **Any OpenAI-compatible API**: Works with OpenAI, Anthropic, Google, Groq, local models (LM Studio, Ollama)
+- **Two sorting modes**:
+  - **Auto**: AI assigns every file to a folder automatically
+  - **Semi-Auto**: AI highlights top matching folders per file, you make the final click
+- **Category generation**: AI proposes folder structure based on your file collection. You review/edit categories before creation.
+- **AI Reasoning display**: Toggle to see why the AI chose each folder (reasoning text per file)
+- **Cost estimation**: Real-time token cost estimates with provider-specific pricing
+- **Budget control**: Set a maximum budget ($0.00 = no limit)
+- **Smart rate limiting**: Automatic per-provider pacing with 429-retry and exponential backoff
+- **AI glow borders**: Gold glow on grid nodes that AI suggests for the current file (toggle)
+- **Folder depth control**: Choose how many levels deep AI should create subfolders (1-3)
 
-### Diagnostics
-- **Built-in diagnostic tool**: Test database, file operations, MIME detection, screen info, and more
-- **Application logging**: Full log viewer with export capability
+### File List Window
+- **Floating tool window**: Opens via F key or button. Always shows the full file list.
+- **Multi-select**: Extended selection with right-click to assign files to folders or set decisions (Keep/Delete/Sort Later)
+- **Sorting**: By Name, Decision status, or Extension
+- **Real-time status**: Shows decision status ([K]/[D]/[L]/[M]) and file sizes per item
+- **Cross-mode sync**: Changes in the file list propagate to all modes instantly
+
+### Review & Execute Screen
+- **Full file table**: Shows ALL files (including pending) with color-coded decisions
+- **Columns**: File name, Size, Decision, Destination, Mode (move/copy)
+- **Inline editing**: Change decisions and destinations directly in the table
+- **Filter & sort**: Filter by decision type, sort by name/decision/destination
+- **Bulk actions**: "All Keep", "All Delete", "All Sort Later", "All Pending" buttons
+- **Preview on hover**: Toggle to see file path, size, MIME type when hovering rows
+- **Folder picker**: Browse button beside each destination for selecting folders outside the grid
+- **Destination disambiguation**: When folders share names, shows parent/name to distinguish
+- **Copy mode**: Change any row to "copy" to duplicate rather than move
+- **Consolidate button**: Finalizes all changes. Operations can no longer be undone after this.
+- **Export log**: Save execution results as CSV
+
+### Execution Results
+- **Session statistics**: Files reviewed, kept, deleted, sorted later, moved. Review pace (files/minute).
+- **Disk space freed**: Shows total bytes recovered from deletions
+- **Execution log**: Table of all operations with per-row undo buttons
+- **Filter by action**: Show only Moved, Deleted, or Kept entries
+- **Undo All**: Batch-undo all reversible operations
+- **Export**: Save the full log as CSV
+
+### Duplicate Detection
+- **SHA-256 hashing**: Finds exact duplicate files by content hash
+- **Group view**: Tree widget showing duplicate groups with file details
+- **Keep Newest**: One-click to mark all duplicates except the most recent for deletion
+- **Column sorting**: Sort by any column in the duplicate tree
+
+### Launcher / Main Screen
+- **Single-window architecture**: All modes run inside one window via QStackedWidget — no separate windows or flicker when switching modes
+- **Mode selection**: Basic, Advanced, or AI mode
+- **Multiple folders**: Toggle to add multiple source folders to a single session
+- **Recent folders**: Quick access to previously used source folders (middle-click to remove)
+- **Dark/Light theme**: Toggle between dark and light color schemes
+- **User Data**: Activity log of all past executions; AI-powered personality analysis and organization tips
+- **Clear session**: Reset all decisions and start fresh
+- **Session resume**: Shows "Session in progress" label when a previous session has sorted files
 
 ## Requirements
 
@@ -48,6 +112,7 @@ Made with a dream, Github Copilot, executive dysfunction and an obsessive attent
   - Qt6::Widgets
   - Qt6::Gui
   - Qt6::Sql
+  - Qt6::Network (for AI Mode)
 - **C++17** compatible compiler
 
 ## Building
@@ -55,79 +120,54 @@ Made with a dream, Github Copilot, executive dysfunction and an obsessive attent
 ### Quick Build
 
 ```bash
-# Clone the repository
 git clone https://github.com/trabalhefabricio/file-tinder.git
 cd file-tinder
-
-# Create build directory
 mkdir build && cd build
-
-# Configure and build
 cmake ..
 cmake --build . --parallel
 ```
 
-### Detailed Build Instructions
-
-#### Linux (Ubuntu/Debian)
+### Linux (Ubuntu/Debian)
 
 ```bash
-# Install dependencies
 sudo apt-get update
-sudo apt-get install -y cmake qt6-base-dev libqt6sql6-sqlite
+sudo apt-get install -y cmake qt6-base-dev libqt6sql6-sqlite libqt6network6
 
-# Build
 mkdir build && cd build
 cmake ..
 make -j$(nproc)
-
-# Run
 ./FileTinder
 ```
 
-#### Linux (Fedora)
+### Linux (Fedora)
 
 ```bash
-# Install dependencies
 sudo dnf install cmake qt6-qtbase-devel qt6-qttools-devel
-
-# Build
 mkdir build && cd build
 cmake ..
 make -j$(nproc)
 ```
 
-#### macOS
+### macOS
 
 ```bash
-# Install dependencies via Homebrew
 brew install cmake qt@6
-
-# Add Qt to PATH
 export PATH="/opt/homebrew/opt/qt@6/bin:$PATH"
-
-# Build
 mkdir build && cd build
 cmake ..
 make -j$(sysctl -n hw.ncpu)
-
-# Run
 ./FileTinder
 ```
 
-#### Windows (Visual Studio)
+### Windows (Visual Studio)
 
 ```batch
 REM Install Qt 6 from https://www.qt.io/download
 REM Set Qt6_DIR environment variable
-
-mkdir build
-cd build
+mkdir build && cd build
 cmake -G "Visual Studio 17 2022" -A x64 ..
 cmake --build . --config Release
 ```
-
-### CMake Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -143,79 +183,65 @@ Use the full release checklist here:
 - [PRISTINE_QA_CHECKLIST.md](PRISTINE_QA_CHECKLIST.md)
   - Includes feature-by-feature checks plus AI and non-AI compatibility matrixes.
 
-### Keyboard Shortcuts
+## Keyboard Shortcuts
 
-#### Basic Mode
+### All Modes
 | Key | Action |
 |-----|--------|
 | → (Right Arrow) | Keep file |
 | ← (Left Arrow) | Delete file |
-| ↓ (Down Arrow) | Skip file |
-| ↑ (Up Arrow) | Go back |
-| Z | Undo last action |
+| ↓ (Down Arrow) | Sort later (move to end of list) |
+| Z or Backspace | Undo last action |
+| Y | Redo last undone action |
 | P | Open image preview window |
+| F | Open File List window |
+| Ctrl+F | Focus search box |
 | Enter | Finish review |
-| ? | Show shortcuts help |
+| ? or / | Show shortcuts help |
+| Esc | Close dialog |
 
-#### Advanced Mode
+### Advanced / AI Mode
 | Key | Action |
 |-----|--------|
 | 1-9, 0 | Quick access folders (up to 10 slots) |
-| ← or D | Delete file |
-| ↓ or S | Skip file |
-| ↑ | Go back |
 | K | Keep file |
-| Z | Undo last action |
-| N | Add new folder to mind map |
-
-### Workflow
-
-1. **Select Folder**: Choose the folder containing files to organize
-2. **Choose Mode**: Basic for simple sorting, Advanced for complex folder structures
-3. **Sort Files**: Use swipes/clicks to assign each file to a destination
-4. **Review**: Check the summary of all pending operations
-5. **Execute**: Confirm and execute all moves/deletions
+| D | Delete file |
+| S | Sort later |
+| N | Add new folder to grid |
+| Tab | Enter grid keyboard navigation |
+| Arrow keys (in grid mode) | Navigate between folder buttons |
+| Space (in grid mode) | Assign file to focused folder |
+| Esc (in grid mode) | Exit grid navigation |
 
 ## Project Structure
 
 ```
 file-tinder/
-├── CMakeLists.txt              # Build configuration
-├── README.md                   # This file
+├── CMakeLists.txt
+├── README.md
+├── CHANGELOG.md
+├── LICENSE
 ├── app/
-│   ├── include/                # Header files
-│   │   ├── ui_constants.hpp
-│   │   ├── DatabaseManager.hpp
-│   │   ├── FolderTreeModel.hpp
-│   │   ├── FolderNodeWidget.hpp
-│   │   ├── MindMapView.hpp
-│   │   ├── FilterWidget.hpp
-│   │   ├── ImagePreviewWindow.hpp
-│   │   ├── FileTinderExecutor.hpp
-│   │   ├── AppLogger.hpp
-│   │   ├── DiagnosticTool.hpp
-│   │   ├── StandaloneFileTinderDialog.hpp
-│   │   └── AdvancedFileTinderDialog.hpp
-│   ├── lib/                    # Source files
-│   │   ├── main.cpp
-│   │   ├── DatabaseManager.cpp
-│   │   ├── FolderTreeModel.cpp
-│   │   ├── FolderNodeWidget.cpp
-│   │   ├── MindMapView.cpp
-│   │   ├── FilterWidget.cpp
-│   │   ├── ImagePreviewWindow.cpp
-│   │   ├── FileTinderExecutor.cpp
-│   │   ├── AppLogger.cpp
-│   │   ├── DiagnosticTool.cpp
-│   │   ├── StandaloneFileTinderDialog.cpp
-│   │   └── AdvancedFileTinderDialog.cpp
-│   └── resources/              # Resources
+│   ├── include/
+│   │   ├── ui_constants.hpp         # UI scaling, colors, dimensions
+│   │   ├── DatabaseManager.hpp      # SQLite session persistence
+│   │   ├── FolderTreeModel.hpp      # Folder node tree data model
+│   │   ├── MindMapView.hpp          # Visual folder grid widget
+│   │   ├── FilterWidget.hpp         # File type filter bar
+│   │   ├── ImagePreviewWindow.hpp   # Zoomable image preview
+│   │   ├── FileListWindow.hpp       # Floating file list tool window
+│   │   ├── FileTinderExecutor.hpp   # Move/delete/copy execution engine
+│   │   ├── DuplicateDetectionWindow.hpp  # SHA-256 duplicate finder
+│   │   ├── AppLogger.hpp            # Application logging
+│   │   ├── UserDataDialog.hpp       # User data and activity log
+│   │   ├── ManualEditDialog.hpp     # Grid folder batch editor
+│   │   ├── StandaloneFileTinderDialog.hpp  # Basic mode dialog
+│   │   ├── AdvancedFileTinderDialog.hpp    # Advanced mode dialog
+│   │   └── AiFileTinderDialog.hpp          # AI mode dialog
+│   ├── lib/                         # Source implementations
+│   └── resources/
 │       ├── resources.qrc
 │       └── icons/
-│           ├── folder.svg
-│           ├── folder-new.svg
-│           └── folder-linked.svg
-└── proposal/                   # Original specification
 ```
 
 ## Database
@@ -232,13 +258,14 @@ File Tinder uses SQLite for session persistence. The database is stored in:
 CREATE TABLE file_tinder_state (
     folder_path TEXT NOT NULL,
     file_path TEXT NOT NULL,
-    decision TEXT NOT NULL CHECK (decision IN ('pending', 'keep', 'delete', 'skip', 'move')),
+    decision TEXT NOT NULL,
     destination_folder TEXT,
+    decided_in_mode TEXT,
     timestamp DATETIME,
     UNIQUE(folder_path, file_path)
 );
 
--- Folder tree configuration (Advanced Mode mind map)
+-- Folder tree configuration
 CREATE TABLE tinder_folder_tree (
     session_folder TEXT NOT NULL,
     folder_path TEXT NOT NULL,
@@ -250,15 +277,7 @@ CREATE TABLE tinder_folder_tree (
     UNIQUE(session_folder, folder_path)
 );
 
--- Folder connections (Advanced Mode grouped folders)
-CREATE TABLE tinder_folder_connections (
-    session_folder TEXT NOT NULL,
-    group_id INTEGER NOT NULL,
-    folder_path TEXT NOT NULL,
-    UNIQUE(session_folder, folder_path)
-);
-
--- Quick access folders (Advanced Mode, up to 10 slots)
+-- Quick access folders (up to 10 slots)
 CREATE TABLE quick_access_folders (
     session_folder TEXT NOT NULL,
     folder_path TEXT NOT NULL,
@@ -270,6 +289,42 @@ CREATE TABLE quick_access_folders (
 CREATE TABLE recent_folders (
     folder_path TEXT NOT NULL UNIQUE,
     timestamp DATETIME
+);
+
+-- AI provider settings
+CREATE TABLE ai_providers (
+    session_folder TEXT NOT NULL,
+    provider TEXT,
+    endpoint TEXT,
+    api_key TEXT,
+    model TEXT,
+    UNIQUE(session_folder)
+);
+
+-- Grid configurations (named layouts)
+CREATE TABLE grid_configs (
+    session_folder TEXT NOT NULL,
+    config_name TEXT NOT NULL,
+    paths TEXT,
+    UNIQUE(session_folder, config_name)
+);
+
+-- Execution log (for undo support)
+CREATE TABLE execution_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_folder TEXT NOT NULL,
+    action TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    dest_path TEXT,
+    timestamp DATETIME
+);
+
+-- Session source folders (multiple folder support)
+CREATE TABLE session_source_folders (
+    session_folder TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    UNIQUE(session_folder, source_path)
 );
 ```
 
@@ -289,4 +344,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Inspired by the Tinder swipe interface
 - Built with [Qt 6](https://www.qt.io/)
-- Icons from [Material Design Icons](https://materialdesignicons.com/)
+- AI integration via OpenAI-compatible APIs

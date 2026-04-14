@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QMap>
 #include <QTextBrowser>
+#include <QCheckBox>
 
 class MindMapView;
 class FolderTreeModel;
@@ -69,6 +70,7 @@ public:
     QString folder_purpose() const;
     AiProviderConfig provider_config() const;
     int confidence_threshold() const;
+    int category_limit() const;
 
 private:
     void build_ui();
@@ -92,9 +94,10 @@ private:
     QSpinBox* semi_count_spin_;
     QComboBox* category_combo_;
     QSpinBox* depth_spin_;
+    QCheckBox* category_limit_check_ = nullptr;
+    QSpinBox* category_limit_spin_ = nullptr;
     QTextEdit* purpose_edit_;
     QLabel* cost_label_;
-    QSpinBox* confidence_spin_;
     QNetworkAccessManager* fetch_nam_;
 };
 
@@ -105,7 +108,9 @@ class AiFileTinderDialog : public AdvancedFileTinderDialog {
 public:
     explicit AiFileTinderDialog(const QString& source_folder,
                                 DatabaseManager& db,
-                                QWidget* parent = nullptr);
+                                QWidget* parent = nullptr,
+                                const QStringList& additional_sources = {},
+                                FolderTreeModel* shared_folder_model = nullptr);
     ~AiFileTinderDialog() override;
 
     void initialize() override;
@@ -119,6 +124,7 @@ private:
     AiCategoryMode category_mode_;
     int semi_count_;
     int category_depth_;
+    int category_limit_ = 0;
     QString folder_purpose_;
     AiProviderConfig provider_config_;
     std::vector<AiFileSuggestion> suggestions_;
@@ -126,6 +132,7 @@ private:
     QStringList highlighted_folders_;
     QPushButton* ai_setup_btn_ = nullptr;
     QPushButton* rerun_ai_btn_ = nullptr;
+    QCheckBox* ai_glow_toggle_ = nullptr;
 
     // Network
     QNetworkAccessManager* network_manager_;
@@ -138,7 +145,9 @@ private:
 
     QWidget* ai_suggestions_panel_ = nullptr;
     QListWidget* ai_suggestions_list_ = nullptr;
+    QPushButton* ai_other_btn_ = nullptr;
     QLabel* ai_reasoning_label_ = nullptr;
+    QCheckBox* ai_reasoning_toggle_ = nullptr;
     int confidence_threshold_ = 0;
 
     // AI correction tracking — records when user overrides AI suggestion
@@ -175,6 +184,12 @@ private:
     void highlight_suggested_folders(const QStringList& folders);
     void clear_folder_highlights();
     void on_folder_clicked_from_ai(const QString& folder_path);
+
+    // Dynamic batch sizing based on folder count, model type, and file count
+    int calculate_batch_size(int folder_count, int total_files) const;
+
+    // Whether reasoning display is enabled via toggle
+    bool is_reasoning_visible() const;
 
     // Rate limiting
     bool check_rate_limit();

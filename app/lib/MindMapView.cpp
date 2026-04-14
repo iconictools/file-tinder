@@ -8,7 +8,11 @@
 #include <QMimeData>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QDragLeaveEvent>
+#include <QDataStream>
 #include <QFileInfo>
+#include <QFontMetrics>
+#include <QLabel>
 
 // === FolderButton Implementation ===
 
@@ -19,6 +23,7 @@ FolderButton::FolderButton(FolderNode* node, QWidget* parent)
     setCursor(Qt::PointingHandCursor);
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     setFixedSize(ui::scaling::scaled(120), ui::scaling::scaled(28));
+    setAcceptDrops(true);
     update_display();
     update_style();
     
@@ -29,14 +34,48 @@ FolderButton::FolderButton(FolderNode* node, QWidget* parent)
 
 void FolderButton::update_display() {
     QString name;
-    if (show_full_path_) {
-        name = node_->path;
-        QStringList parts = name.split(QDir::separator());
-        if (parts.size() <= 2) parts = name.split('/');  // fallback for stored paths
-        if (parts.size() > 2) {
-            name = parts.mid(parts.size() - 2).join(QDir::separator());
+    if (path_display_mode_ == 2 && !source_path_.isEmpty()) {
+        // Fuller paths: full relative path from source
+        QString p = QDir::toNativeSeparators(node_->path);
+        QString src = QDir::toNativeSeparators(source_path_);
+        if (!src.endsWith(QDir::separator())) src += QDir::separator();
+        if (p == QDir::toNativeSeparators(source_path_)) {
+            name = QFileInfo(source_path_).fileName();
+        } else if (p.startsWith(src)) {
+            name = p.mid(src.length());
+        } else {
+            // Fallback with forward slashes
+            QString pf = node_->path;
+            QString sf = source_path_;
+            if (!sf.endsWith('/')) sf += '/';
+            if (pf.startsWith(sf)) {
+                name = pf.mid(sf.length());
+            } else {
+                name = node_->path;
+            }
         }
-        // For single-component paths, just use the full path as-is
+    } else if (path_display_mode_ == 1 && !source_path_.isEmpty()) {
+        // Paths: one-level relative (parent/name if deeper than direct child)
+        QString p = node_->path;
+        QString src = source_path_;
+        // Normalize to forward slashes for comparison
+        QString pn = QDir::cleanPath(p);
+        QString sn = QDir::cleanPath(src);
+        if (pn == sn) {
+            name = QFileInfo(src).fileName();
+        } else if (pn.startsWith(sn + '/') || pn.startsWith(sn + QDir::separator())) {
+            QString rel = pn.mid(sn.length() + 1);
+            QStringList parts = rel.split('/');
+            if (parts.size() <= 1) {
+                name = rel;  // Direct child: just basename
+            } else {
+                // Show parent/name
+                name = parts.mid(parts.size() - 2).join(QDir::separator());
+            }
+        } else {
+            // Outside source: show full path
+            name = node_->path;
+        }
     } else {
         name = node_->display_name;
         if (name.isEmpty()) {
@@ -65,7 +104,21 @@ void FolderButton::set_selected(bool selected) {
     update_style();
 }
 
+void FolderButton::set_highlighted(bool on) {
+    is_highlighted_ = on;
+    update_style();
+}
+
 void FolderButton::update_style() {
+    if (is_highlighted_ && !is_selected_) {
+        setStyleSheet(
+            "QPushButton { text-align: center; padding: 2px 6px; "
+            "background-color: #3a3520; border: 2px solid #f1c40f; "
+            "border-radius: 4px; color: #f1c40f; font-weight: bold; font-size: 10px; }"
+            "QPushButton:hover { background-color: #4a4530; }"
+        );
+        return;
+    }
     if (is_selected_) {
         setStyleSheet(
             "QPushButton { text-align: center; padding: 2px 6px; "
@@ -128,6 +181,38 @@ void FolderButton::mouseMoveEvent(QMouseEvent* event) {
     mime->setText(node_->path);
     drag->setMimeData(mime);
     drag->exec(Qt::MoveAction);
+}
+
+void FolderButton::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-filetinder-indices")) {
+        event->acceptProposedAction();
+        setStyleSheet(
+            "QPushButton { text-align: center; padding: 2px 6px; "
+            "background-color: #1a3d2a; border: 2px solid #2ecc71; "
+            "border-radius: 4px; color: #2ecc71; font-weight: bold; font-size: 10px; }"
+        );
+    }
+}
+
+void FolderButton::dragLeaveEvent(QDragLeaveEvent* event) {
+    Q_UNUSED(event);
+    update_style();
+}
+
+void FolderButton::dropEvent(QDropEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-filetinder-indices")) {
+        QByteArray encoded = event->mimeData()->data("application/x-filetinder-indices");
+        QDataStream stream(&encoded, QIODevice::ReadOnly);
+        QList<int> indices;
+        while (!stream.atEnd()) {
+            int idx;
+            stream >> idx;
+            indices.append(idx);
+        }
+        event->acceptProposedAction();
+        update_style();
+        emit files_dropped(node_->path, indices);
+    }
 }
 
 // === MindMapView Implementation ===
@@ -200,6 +285,17 @@ void MindMapView::refresh_layout() {
     );
     connect(add_button_, &QPushButton::clicked, this, &MindMapView::add_folder_requested);
     grid_layout_->addWidget(add_button_, next_row_, next_col_);
+
+    // Show empty state message if no child folders exist
+    if (!model_ || !model_->root_node() || model_->root_node()->children.empty()) {
+        empty_label_ = new QLabel("No destination folders yet.\nClick [+] to add folders.");
+        empty_label_->setStyleSheet("color: #888; font-size: 13px; font-style: italic;");
+        empty_label_->setAlignment(Qt::AlignCenter);
+        // Add to the grid layout so it's properly managed and visible
+        grid_layout_->addWidget(empty_label_, 0, 1, 1, qMax(1, max_rows_per_col_ - 1));
+    } else {
+        empty_label_ = nullptr;
+    }
     
     // Set the new content widget
     scroll_area_->setWidget(content_widget_);
@@ -222,13 +318,17 @@ void MindMapView::build_grid() {
     // Button dimensions based on display mode
     int btn_w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_)
                                    : (compact_mode_ ? ui::scaling::scaled(120) : ui::scaling::scaled(180));
-    int btn_h = compact_mode_ ? ui::scaling::scaled(32) : ui::scaling::scaled(36);
+    int btn_h = ui::scaling::scaled(custom_height_);
     int font_size = compact_mode_ ? 11 : 12;
     
     // Root folder in column 0, spanning all rows that children will use
+    int root_w = compact_mode_ ? ui::scaling::scaled(140) : ui::scaling::scaled(200);
+    int root_h = compact_mode_ ? ui::scaling::scaled(38) : ui::scaling::scaled(42);
+    if (custom_width_ > 0) root_w = ui::scaling::scaled(custom_width_ + 20);
     auto* root_btn = new FolderButton(root, content_widget_);
-    root_btn->set_show_full_path(show_full_paths_);
-    root_btn->setFixedSize(btn_w, btn_h);
+    // Root always shows just the source folder basename
+    root_btn->set_path_display_mode(0);
+    root_btn->setFixedSize(root_w, root_h);
     root_btn->setStyleSheet(
         QString("QPushButton { text-align: center; padding: 2px 6px; "
         "background-color: #1a252f; border: 2px solid #3498db; "
@@ -257,15 +357,38 @@ void MindMapView::build_grid() {
 
 void MindMapView::place_folder_node(FolderNode* node) {
     auto* btn = new FolderButton(node, content_widget_);
-    btn->set_show_full_path(show_full_paths_);
+    QString source_path = (model_ && model_->root_node()) ? model_->root_node()->path : QString();
+    btn->set_path_display_mode(path_display_mode_, source_path);
+
+    // Apply AI glow if this path is highlighted
+    if (highlighted_paths_.contains(node->path)) {
+        btn->set_highlighted(true);
+    }
     
     // Apply display mode sizing: ensure uniform row height in both modes
-    if (compact_mode_) {
+    int left_margin = 0;
+    if (show_hierarchy_ && !source_path.isEmpty()) {
+        // Calculate depth relative to source path by counting path segments
+        QString rel = QDir(source_path).relativeFilePath(node->path);
+        int depth = rel.split('/', Qt::SkipEmptyParts).size() - 1;
+        if (depth < 0) depth = 0;
+        left_margin = depth * 20;
+    }
+    int btn_h = ui::scaling::scaled(custom_height_);
+    if (auto_width_) {
+        QFontMetrics fm(btn->font());
+        int text_w = fm.horizontalAdvance(btn->text()) + 24;
+        text_w = qBound(80, text_w, 300);
+        btn->setFixedSize(ui::scaling::scaled(text_w) + left_margin, btn_h);
+    } else if (compact_mode_) {
         int w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_) : ui::scaling::scaled(120);
-        btn->setFixedSize(w, ui::scaling::scaled(32));
+        btn->setFixedSize(w + left_margin, btn_h);
     } else {
         int w = custom_width_ > 0 ? ui::scaling::scaled(custom_width_) : ui::scaling::scaled(180);
-        btn->setFixedSize(w, ui::scaling::scaled(36));
+        btn->setFixedSize(w + left_margin, btn_h);
+    }
+    if (left_margin > 0) {
+        btn->setContentsMargins(left_margin, 0, 0, 0);
     }
     
     buttons_[node->path] = btn;
@@ -274,12 +397,23 @@ void MindMapView::place_folder_node(FolderNode* node) {
     
     connect(btn, &FolderButton::folder_clicked, this, &MindMapView::folder_clicked);
     connect(btn, &FolderButton::folder_right_clicked, this, &MindMapView::folder_context_menu);
+    connect(btn, &FolderButton::files_dropped, this, &MindMapView::files_dropped);
     
-    // Advance: go down in current column, wrap to next column
-    next_row_++;
-    if (next_row_ >= max_rows_per_col_) {
-        next_row_ = 0;
+    // Advance position based on layout direction
+    if (row_major_) {
+        // Row-major: fill left-to-right, then wrap down
         next_col_++;
+        if (next_col_ >= max_rows_per_col_ + 1) {  // +1 to account for root column
+            next_col_ = 1;
+            next_row_++;
+        }
+    } else {
+        // Column-major: fill top-to-bottom, then wrap right
+        next_row_++;
+        if (next_row_ >= max_rows_per_col_) {
+            next_row_ = 0;
+            next_col_++;
+        }
     }
     
     // Place children (they go into the grid too)
@@ -289,15 +423,22 @@ void MindMapView::place_folder_node(FolderNode* node) {
 }
 
 void MindMapView::zoom_in() {
-    // No-op for widget-based view
+    if (custom_width_ < 300) {
+        custom_width_ += 20;
+        refresh_layout();
+    }
 }
 
 void MindMapView::zoom_out() {
-    // No-op for widget-based view
+    if (custom_width_ > 80) {
+        custom_width_ -= 20;
+        refresh_layout();
+    }
 }
 
 void MindMapView::zoom_fit() {
-    // No-op for widget-based view
+    custom_width_ = compact_mode_ ? 120 : 180;
+    refresh_layout();
 }
 
 void MindMapView::set_selected_folder(const QString& path) {
@@ -360,6 +501,42 @@ void MindMapView::sort_by_count() {
     refresh_layout();
 }
 
+void MindMapView::swap_nodes(int idx_a, int idx_b) {
+    build_ordered_paths();
+    if (idx_a < 0 || idx_a >= ordered_paths_.size()) return;
+    if (idx_b < 0 || idx_b >= ordered_paths_.size()) return;
+    if (idx_a == idx_b) return;
+
+    // Swap in ordered_paths_
+    ordered_paths_.swapItemsAt(idx_a, idx_b);
+
+    // Swap grid positions
+    QString path_a = ordered_paths_[idx_a];
+    QString path_b = ordered_paths_[idx_b];
+    if (grid_positions_.contains(path_a) && grid_positions_.contains(path_b)) {
+        auto pos_a = grid_positions_[path_a];
+        auto pos_b = grid_positions_[path_b];
+        grid_positions_[path_a] = pos_b;
+        grid_positions_[path_b] = pos_a;
+    }
+
+    build_grid();
+}
+
+void MindMapView::set_highlighted_paths(const QStringList& paths) {
+    highlighted_paths_ = paths;
+    for (auto it = buttons_.begin(); it != buttons_.end(); ++it) {
+        it.value()->set_highlighted(paths.contains(it.key()));
+    }
+}
+
+void MindMapView::clear_highlighted_paths() {
+    highlighted_paths_.clear();
+    for (auto it = buttons_.begin(); it != buttons_.end(); ++it) {
+        it.value()->set_highlighted(false);
+    }
+}
+
 void MindMapView::set_keyboard_mode(bool on) {
     keyboard_mode_ = on;
     if (on) {
@@ -417,9 +594,16 @@ void MindMapView::update_focus_visual() {
     }
 }
 
+void MindMapView::clamp_focused_index() {
+    if (focused_index_ < 0) focused_index_ = 0;
+    if (focused_index_ >= static_cast<int>(ordered_paths_.size()))
+        focused_index_ = static_cast<int>(ordered_paths_.size()) - 1;
+}
+
 void MindMapView::focus_next() {
     if (ordered_paths_.isEmpty()) return;
     focused_index_ = (focused_index_ + 1) % ordered_paths_.size();
+    clamp_focused_index();
     update_focus_visual();
 }
 
@@ -427,6 +611,7 @@ void MindMapView::focus_prev() {
     if (ordered_paths_.isEmpty()) return;
     focused_index_--;
     if (focused_index_ < 0) focused_index_ = ordered_paths_.size() - 1;
+    clamp_focused_index();
     update_focus_visual();
 }
 
@@ -452,6 +637,7 @@ void MindMapView::focus_up() {
     }
     // If no button above, wrap to bottom of previous column
     focus_prev();
+    clamp_focused_index();
 }
 
 void MindMapView::focus_down() {
@@ -474,6 +660,7 @@ void MindMapView::focus_down() {
     }
     // If no button below, wrap to next
     focus_next();
+    clamp_focused_index();
 }
 
 void MindMapView::activate_focused() {

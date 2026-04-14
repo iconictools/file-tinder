@@ -18,15 +18,15 @@ set(SOURCES
     app/lib/AdvancedFileTinderDialog.cpp
     app/lib/FolderTreeModel.cpp
     app/lib/FileTinderExecutor.cpp
-    app/lib/FolderNodeWidget.cpp
     app/lib/MindMapView.cpp
     app/lib/AppLogger.cpp
-    app/lib/DiagnosticTool.cpp
+    app/lib/UserDataDialog.cpp
     app/lib/FilterWidget.cpp
     app/lib/ImagePreviewWindow.cpp
     app/lib/AiFileTinderDialog.cpp
     app/lib/FileListWindow.cpp
     app/lib/DuplicateDetectionWindow.cpp
+    app/lib/ManualEditDialog.cpp
 )
 
 # Header files
@@ -36,16 +36,16 @@ set(HEADERS
     app/include/AdvancedFileTinderDialog.hpp
     app/include/FolderTreeModel.hpp
     app/include/FileTinderExecutor.hpp
-    app/include/FolderNodeWidget.hpp
     app/include/MindMapView.hpp
     app/include/ui_constants.hpp
     app/include/AppLogger.hpp
-    app/include/DiagnosticTool.hpp
+    app/include/UserDataDialog.hpp
     app/include/FilterWidget.hpp
     app/include/ImagePreviewWindow.hpp
     app/include/AiFileTinderDialog.hpp
     app/include/FileListWindow.hpp
     app/include/DuplicateDetectionWindow.hpp
+    app/include/ManualEditDialog.hpp
 )
 
 # Resources
