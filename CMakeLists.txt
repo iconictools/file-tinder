@@ -7,6 +7,11 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+set(FILE_TINDER_APP_VARIANT "suite" CACHE STRING
+    "App variant to build: suite, iconic-file-tinder, iconic-file-filer, iconic-ai-filer")
+set_property(CACHE FILE_TINDER_APP_VARIANT PROPERTY STRINGS
+    suite iconic-file-tinder iconic-file-filer iconic-ai-filer)
+
 # Find Qt6 packages
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui Sql Network)
 
@@ -53,20 +58,33 @@ set(RESOURCES
     app/resources/resources.qrc
 )
 
+set(APP_EXECUTABLE_NAME "${PROJECT_NAME}")
+if(FILE_TINDER_APP_VARIANT STREQUAL "iconic-file-tinder")
+    set(APP_EXECUTABLE_NAME "iconic-file-tinder")
+elseif(FILE_TINDER_APP_VARIANT STREQUAL "iconic-file-filer")
+    set(APP_EXECUTABLE_NAME "iconic-file-filer")
+elseif(FILE_TINDER_APP_VARIANT STREQUAL "iconic-ai-filer")
+    set(APP_EXECUTABLE_NAME "iconic-ai-filer")
+elseif(NOT FILE_TINDER_APP_VARIANT STREQUAL "suite")
+    message(FATAL_ERROR
+        "Invalid FILE_TINDER_APP_VARIANT='${FILE_TINDER_APP_VARIANT}'. "
+        "Expected one of: suite, iconic-file-tinder, iconic-file-filer, iconic-ai-filer")
+endif()
+
 # Create executable
-add_executable(${PROJECT_NAME}
+add_executable(${APP_EXECUTABLE_NAME}
     ${SOURCES}
     ${HEADERS}
     ${RESOURCES}
 )
 
 # Include directories
-target_include_directories(${PROJECT_NAME} PRIVATE
+target_include_directories(${APP_EXECUTABLE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/app/include
 )
 
 # Link Qt6 libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_link_libraries(${APP_EXECUTABLE_NAME} PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::Gui
@@ -74,19 +92,23 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Network
 )
 
+target_compile_definitions(${APP_EXECUTABLE_NAME} PRIVATE
+    FILE_TINDER_APP_VARIANT="${FILE_TINDER_APP_VARIANT}"
+)
+
 # Installation
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${APP_EXECUTABLE_NAME}
     BUNDLE DESTINATION .
     RUNTIME DESTINATION bin
 )
 
 # Platform specific settings
 if(WIN32)
-    set_target_properties(${PROJECT_NAME} PROPERTIES
+    set_target_properties(${APP_EXECUTABLE_NAME} PROPERTIES
         WIN32_EXECUTABLE TRUE
     )
 elseif(APPLE)
-    set_target_properties(${PROJECT_NAME} PROPERTIES
+    set_target_properties(${APP_EXECUTABLE_NAME} PROPERTIES
         MACOSX_BUNDLE TRUE
     )
 endif()

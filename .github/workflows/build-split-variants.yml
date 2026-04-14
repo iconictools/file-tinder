@@ -1,0 +1,75 @@
+name: Build Split App Variants
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-variants:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-13, windows-2022]
+        variant: [iconic-file-tinder, iconic-file-filer, iconic-ai-filer]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt (Linux/macOS)
+        if: runner.os != 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          # Keep aligned with existing repo workflows and current supported Qt 6.x baseline.
+          version: "6.6.*"
+          tools: "tools_cmake"
+
+      - name: Install Qt (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          # Keep aligned with existing repo workflows and current supported Qt 6.x baseline.
+          version: "6.6.*"
+          arch: "win64_msvc2019_64"
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DFILE_TINDER_APP_VARIANT=${{ matrix.variant }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p out
+          cp "build/${{ matrix.variant }}" "out/${{ matrix.variant }}"
+          tar czf "${{ matrix.variant }}-${{ runner.os }}.tar.gz" -C out "${{ matrix.variant }}"
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Copy-Item "build/Release/${{ matrix.variant }}.exe" "out/${{ matrix.variant }}.exe"
+          Compress-Archive -Path "out/*" -DestinationPath "${{ matrix.variant }}-${{ runner.os }}.zip" -Force
+
+      - name: Upload artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variant }}-${{ runner.os }}
+          path: ${{ matrix.variant }}-${{ runner.os }}.tar.gz
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variant }}-${{ runner.os }}
+          path: ${{ matrix.variant }}-${{ runner.os }}.zip

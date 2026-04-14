@@ -37,6 +37,70 @@
 #include "ui_constants.hpp"
 #include "UserDataDialog.hpp"
 
+enum class AppVariant {
+    Suite,
+    IconicFileTinder,
+    IconicFileFiler,
+    IconicAiFiler
+};
+
+static const QString& compiled_app_variant() {
+    static const QString variant = []() {
+#ifdef FILE_TINDER_APP_VARIANT
+        return QStringLiteral(FILE_TINDER_APP_VARIANT).trimmed().toLower();
+#else
+        return QStringLiteral("suite");
+#endif
+    }();
+    return variant;
+}
+
+static AppVariant current_app_variant() {
+    static const AppVariant variant = []() {
+        const QString compiled_variant = compiled_app_variant();
+        if (compiled_variant == "iconic-file-tinder") return AppVariant::IconicFileTinder;
+        if (compiled_variant == "iconic-file-filer") return AppVariant::IconicFileFiler;
+        if (compiled_variant == "iconic-ai-filer") return AppVariant::IconicAiFiler;
+        return AppVariant::Suite;
+    }();
+    return variant;
+}
+
+static bool supports_basic_mode() {
+    AppVariant variant = current_app_variant();
+    return variant == AppVariant::Suite || variant == AppVariant::IconicFileTinder;
+}
+
+static bool supports_advanced_mode() {
+    AppVariant variant = current_app_variant();
+    return variant == AppVariant::Suite || variant == AppVariant::IconicFileFiler;
+}
+
+static bool supports_ai_mode() {
+    AppVariant variant = current_app_variant();
+    return variant == AppVariant::Suite || variant == AppVariant::IconicAiFiler;
+}
+
+static QString app_title_text() {
+    switch (current_app_variant()) {
+    case AppVariant::IconicFileTinder: return "ICONIC FILE TINDER";
+    case AppVariant::IconicFileFiler: return "ICONIC FILE FILER";
+    case AppVariant::IconicAiFiler: return "ICONIC AI FILER";
+    case AppVariant::Suite: default: return "FILE TINDER SUITE";
+    }
+}
+
+static QString app_subtitle_text() {
+    switch (current_app_variant()) {
+    case AppVariant::IconicFileTinder: return "Swipe-style triage and cleanup";
+    case AppVariant::IconicFileFiler: return "Structured folder filing workspace";
+    case AppVariant::IconicAiFiler: return "AI-assisted file categorization and filing";
+    case AppVariant::Suite: default: return "Unified launcher for Tinder, Filer, and AI Filer";
+    }
+}
+
+static const char* kVariantUnavailableTooltip = "Not available in this app variant";
+
 class FileTinderLauncher : public QWidget {
     Q_OBJECT
     
@@ -46,7 +110,7 @@ public:
         , db_manager_()
         , chosen_path_() {
         
-        setWindowTitle("File Tinder");
+        setWindowTitle(app_title_text());
         setMinimumSize(ui::scaling::scaled(550), ui::scaling::scaled(450));
         
         LOG_INFO("Launcher", "Application starting");
@@ -94,6 +158,8 @@ public:
             // Check for resumable session
             check_session_state();
         }
+
+        launch_default_variant_mode_if_needed();
     }
     
 private:
@@ -106,6 +172,9 @@ private:
     QCheckBox* multi_folder_check_ = nullptr;
     QPushButton* add_folder_btn_ = nullptr;
     QLabel* resume_label_ = nullptr;
+    QPushButton* basic_mode_btn_ = nullptr;
+    QPushButton* advanced_mode_btn_ = nullptr;
+    QPushButton* ai_mode_btn_ = nullptr;
     bool skip_stats_on_next_launch_ = false;  // Skip stats dashboard on mode switch
     bool is_dark_theme_ = true;
     
@@ -180,6 +249,35 @@ private:
         // Keep title bar accessible
         if (y() < avail.top()) move(x(), avail.top());
     }
+
+    void apply_variant_mode_visibility() {
+        if (basic_mode_btn_) {
+            basic_mode_btn_->setEnabled(supports_basic_mode());
+            if (!supports_basic_mode()) basic_mode_btn_->setToolTip(kVariantUnavailableTooltip);
+        }
+        if (advanced_mode_btn_) {
+            advanced_mode_btn_->setEnabled(supports_advanced_mode());
+            if (!supports_advanced_mode()) advanced_mode_btn_->setToolTip(kVariantUnavailableTooltip);
+        }
+        if (ai_mode_btn_) {
+            ai_mode_btn_->setEnabled(supports_ai_mode());
+            if (!supports_ai_mode()) ai_mode_btn_->setToolTip(kVariantUnavailableTooltip);
+        }
+    }
+
+    void launch_default_variant_mode_if_needed() {
+        const AppVariant variant = current_app_variant();
+        if (variant == AppVariant::Suite) return;
+        QTimer::singleShot(0, this, [this, variant]() {
+            if (variant == AppVariant::IconicFileTinder) {
+                launch_basic();
+            } else if (variant == AppVariant::IconicFileFiler) {
+                launch_advanced();
+            } else if (variant == AppVariant::IconicAiFiler) {
+                launch_ai();
+            }
+        });
+    }
     
     void apply_theme() {
         QPalette p;
@@ -245,12 +343,12 @@ private:
         root_layout->setSpacing(18);
         
         // App header
-        auto* app_title = new QLabel("FILE TINDER");
+        auto* app_title = new QLabel(app_title_text());
         app_title->setStyleSheet("font-size: 28px; font-weight: bold; color: #0078d4;");
         app_title->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_title);
         
-        auto* app_desc = new QLabel("Organize files with swipe-style sorting");
+        auto* app_desc = new QLabel(app_subtitle_text());
         app_desc->setStyleSheet("font-size: 13px; color: #888888;");
         app_desc->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_desc);
@@ -420,32 +518,34 @@ private:
         auto* modes_row = new QHBoxLayout();
         modes_row->setSpacing(12);
         
-        auto* basic_mode_btn = new QPushButton("Basic Mode\n(Keep / Delete / Sort Later)");
-        basic_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
-        basic_mode_btn->setStyleSheet(
+        basic_mode_btn_ = new QPushButton("Basic Mode\n(Iconic File Tinder)");
+        basic_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
+        basic_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #107c10; color: white; border: none; font-size: 13px; }"
             "QPushButton:hover { background-color: #0e6b0e; }"
         );
-        connect(basic_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
-        modes_row->addWidget(basic_mode_btn);
+        connect(basic_mode_btn_, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
+        modes_row->addWidget(basic_mode_btn_);
         
-        auto* adv_mode_btn = new QPushButton("Advanced Mode\n(Folder grid + assignment)");
-        adv_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
-        adv_mode_btn->setStyleSheet(
+        advanced_mode_btn_ = new QPushButton("Advanced Mode\n(Iconic File Filer)");
+        advanced_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
+        advanced_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #5c2d91; color: white; border: none; font-size: 13px; }"
             "QPushButton:hover { background-color: #4a2473; }"
         );
-        connect(adv_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
-        modes_row->addWidget(adv_mode_btn);
+        connect(advanced_mode_btn_, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
+        modes_row->addWidget(advanced_mode_btn_);
         
-        auto* ai_mode_btn = new QPushButton("AI Mode\n(Auto-sort with AI suggestions)");
-        ai_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
-        ai_mode_btn->setStyleSheet(
+        ai_mode_btn_ = new QPushButton("AI Mode\n(Iconic AI Filer)");
+        ai_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
+        ai_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #2980b9; color: white; border: none; font-size: 13px; }"
             "QPushButton:hover { background-color: #1a6fa0; }"
         );
-        connect(ai_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_ai);
-        modes_row->addWidget(ai_mode_btn);
+        connect(ai_mode_btn_, &QPushButton::clicked, this, &FileTinderLauncher::launch_ai);
+        modes_row->addWidget(ai_mode_btn_);
+
+        apply_variant_mode_visibility();
         
         root_layout->addLayout(modes_row);
         
@@ -815,7 +915,7 @@ private:
     
     void return_to_launcher() {
         stack_->setCurrentWidget(launcher_page_);
-        setWindowTitle("File Tinder");
+        setWindowTitle(app_title_text());
         check_session_state();
         // Restore the launcher page size so the window doesn't stay enlarged
         if (launcher_size_.isValid()) {
@@ -837,6 +937,11 @@ private:
     }
     
     void launch_basic() {
+        if (!supports_basic_mode()) {
+            QMessageBox::information(this, "Module Not Available",
+                "Iconic File Tinder mode is not available in this build.");
+            return;
+        }
         // Fast path: widget already exists and folder hasn't changed
         if (basic_widget_ && basic_widget_->source_folder() == chosen_path_) {
             if (stack_->currentWidget() == launcher_page_)
@@ -888,6 +993,11 @@ private:
     }
     
     void launch_advanced() {
+        if (!supports_advanced_mode()) {
+            QMessageBox::information(this, "Module Not Available",
+                "Iconic File Filer mode is not available in this build.");
+            return;
+        }
         // Fast path: widget already exists and folder hasn't changed
         if (advanced_widget_ && advanced_widget_->source_folder() == chosen_path_) {
             if (stack_->currentWidget() == launcher_page_)
@@ -938,6 +1048,11 @@ private:
     }
     
     void launch_ai() {
+        if (!supports_ai_mode()) {
+            QMessageBox::information(this, "Module Not Available",
+                "Iconic AI Filer mode is not available in this build.");
+            return;
+        }
         // Fast path: widget already exists and folder hasn't changed
         if (ai_widget_ && ai_widget_->source_folder() == chosen_path_) {
             if (stack_->currentWidget() == launcher_page_)
@@ -1158,9 +1273,28 @@ private:
 int main(int argc, char* argv[]) {
     QApplication qt_app(argc, argv);
     
-    qt_app.setApplicationName("File Tinder");
+    QString app_name = "File Tinder Suite";
+    QString org_name = "FileTinderSuite";
+    switch (current_app_variant()) {
+    case AppVariant::IconicFileTinder:
+        app_name = "Iconic File Tinder";
+        org_name = "IconicFileTinder";
+        break;
+    case AppVariant::IconicFileFiler:
+        app_name = "Iconic File Filer";
+        org_name = "IconicFileFiler";
+        break;
+    case AppVariant::IconicAiFiler:
+        app_name = "Iconic AI Filer";
+        org_name = "IconicAiFiler";
+        break;
+    case AppVariant::Suite:
+    default:
+        break;
+    }
+    qt_app.setApplicationName(app_name);
     qt_app.setApplicationVersion("1.0.0");
-    qt_app.setOrganizationName("FileTinderApp");
+    qt_app.setOrganizationName(org_name);
     
     // Initialize logging
     AppLogger::instance().set_minimum_severity(LogSeverity::Debug);
