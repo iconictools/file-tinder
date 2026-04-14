@@ -19,13 +19,12 @@ All three modes share the same session state, so you can switch between them fre
 ## Features
 
 ### Modular App Suite
-- **Three modular apps in one launcher**:
-  - **Iconic File Tinder** (swipe sorting)
-  - **Iconic File Filer** (folder-tree filing)
-  - **Iconic File AI Filer** (AI-assisted filing)
-- **Suite launcher**: choose one module or multiple modules per session
-- **Module manager**: rescan/detect standalone companion executables and open release downloads
-- **Standalone-aware startup**: supports `--module=` and optional suite attach flow
+- **Split-ready app variants** from one shared core:
+  - **Iconic File Tinder** (`iconic-file-tinder`)
+  - **Iconic File Filer** (`iconic-file-filer`)
+  - **Iconic AI Filer** (`iconic-ai-filer`)
+- Build variant is controlled by `FILE_TINDER_APP_VARIANT`
+- CI auto-builds all three variants via `.github/workflows/build-split-variants.yml`
 
 ### Basic Mode
 - **Swipe-style sorting**: Arrow keys or buttons to quickly categorize files
@@ -182,22 +181,27 @@ cmake --build . --config Release
 |--------|---------|-------------|
 | `CMAKE_BUILD_TYPE` | Release | Build type (Debug/Release) |
 | `Qt6_DIR` | Auto-detected | Path to Qt6 CMake config |
+| `FILE_TINDER_APP_VARIANT` | suite | `suite`, `iconic-file-tinder`, `iconic-file-filer`, or `iconic-ai-filer` |
 
 ## Usage
 
-### Optional Launch Arguments
+### Build Individual Split Variants
 
 ```bash
-# Open launcher with a preselected folder
-./FileTinder --folder=/path/to/files
+# Iconic File Tinder
+cmake -B build-tinder -DCMAKE_BUILD_TYPE=Release -DFILE_TINDER_APP_VARIANT=iconic-file-tinder
+cmake --build build-tinder --parallel
 
-# Request a specific module on startup (tinder | filer | ai-filer)
-./FileTinder --module=tinder
-./FileTinder --module=filer --folder=/path/to/files
+# Iconic File Filer
+cmake -B build-filer -DCMAKE_BUILD_TYPE=Release -DFILE_TINDER_APP_VARIANT=iconic-file-filer
+cmake --build build-filer --parallel
 
-# Open suite selector immediately
-./FileTinder --suite
+# Iconic AI Filer
+cmake -B build-ai-filer -DCMAKE_BUILD_TYPE=Release -DFILE_TINDER_APP_VARIANT=iconic-ai-filer
+cmake --build build-ai-filer --parallel
 ```
+
+See also: [SPLIT_REPOSITORIES.md](SPLIT_REPOSITORIES.md)
 
 ## Pristine Quality Checklist
 
