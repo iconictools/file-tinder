@@ -110,6 +110,21 @@ Use this as a release gate. A release is **not pristine** until every item is ch
 | Any re-run while AI not configured | Never | Must block with “AI Not Configured” message | [ ] |
 | Re-categorize with zero moved files | Never | Must block with “No Sorted Files” message | [ ] |
 
+### 5.4 Non-AI compatibility matrix (other parts)
+
+| Area | Combination | Expected behavior | Must block/message | Verified |
+|---|---|---|---|---|
+| Mode switching | Basic → Advanced | Decisions preserved; advanced grid opens same session | If unsaved close path interrupted, require explicit save/discard/cancel | [ ] |
+| Mode switching | Basic → AI | AI setup required before analysis | Block rerun/setup-dependent actions until configured | [ ] |
+| Mode switching | Advanced → Basic | Decisions preserved; no assignment loss | If current selection invalid after filter change, move to safe next index | [ ] |
+| Mode switching | Advanced ↔ AI | Folder model + decisions remain coherent | If incompatible category choice selected, auto-adjust with warning | [ ] |
+| Filter + include | Folders Only + Include Folders | Include checkbox disabled | Must not silently keep stale include state behavior | [ ] |
+| Filter + custom | Specify with empty extension list | Revert to previous/All behavior | Must message/visibly revert (never apply empty custom filter silently) | [ ] |
+| Sort + order | Any sort field + Asc/Desc toggle | Deterministic ordering and stable navigation | No index-out-of-range when current filtered item disappears | [ ] |
+| File List selection | Ctrl/Shift multi-select + single-click navigation | Multiselect actions only on selected set | Must not auto-navigate unexpectedly during multi-select operations | [ ] |
+| Duplicate detection | Verify hash then delete selected | Selection maps exactly once to marks | Must not double-mark or lose mark state after reopen | [ ] |
+| Review + execute | Bulk edit + execute + undo history | Counts, DB rows, and undo eligibility stay aligned | Permanent actions must be visibly non-undoable | [ ] |
+
 ---
 
 ## 6) File List window
@@ -195,4 +210,3 @@ For each case below, verify user sees: **what failed + why + next step**.
 - [ ] All high-confidence defects found during checklist run are resolved
 - [ ] README/help content reflects actual behavior
 - [ ] Release marked “pristine” only when every section above is complete
-
