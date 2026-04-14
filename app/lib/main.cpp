@@ -57,6 +57,8 @@ struct ModuleDescriptor {
     QStringList standalone_executables;
 };
 
+static const QUrl kSuiteReleasesUrl("https://github.com/iconictools/file-tinder/releases");
+
 class FileTinderLauncher : public QDialog {
     Q_OBJECT
     
@@ -161,7 +163,8 @@ private:
         return "unknown";
     }
 
-    bool is_integrated_module_available(AppModule) const {
+    bool is_integrated_module_available(AppModule module) const {
+        Q_UNUSED(module);
         return true;  // current build ships all modules in a single binary
     }
 
@@ -266,7 +269,7 @@ private:
         root_layout->setSpacing(18);
         
         // App header
-        auto* app_title = new QLabel("ICONIC FILE SUITE");
+        auto* app_title = new QLabel("Iconic File Suite");
         app_title->setStyleSheet("font-size: 28px; font-weight: bold; color: #0078d4;");
         app_title->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_title);
@@ -823,10 +826,10 @@ private:
 
         auto* download_btn = new QPushButton("Download Modules");
         connect(download_btn, &QPushButton::clicked, &manager, [this]() {
-            const QUrl releases_url("https://github.com/iconictools/file-tinder/releases");
-            QDesktopServices::openUrl(releases_url);
+            QDesktopServices::openUrl(kSuiteReleasesUrl);
             QMessageBox::information(this, "Download",
-                "Release page opened. Download Iconic File Filer and Iconic File AI Filer packages, "
+                "Release page opened. Download any module package you need "
+                "(Iconic File Tinder, Iconic File Filer, or Iconic File AI Filer), "
                 "then relaunch or click Rescan.");
         });
         btn_row->addWidget(download_btn);
