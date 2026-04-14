@@ -136,6 +136,12 @@ cmake --build . --config Release
 
 ## Usage
 
+## Pristine Quality Checklist
+
+Use the full release checklist here:
+
+- [PRISTINE_QA_CHECKLIST.md](PRISTINE_QA_CHECKLIST.md)
+
 ### Keyboard Shortcuts
 
 #### Basic Mode
