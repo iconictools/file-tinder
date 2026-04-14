@@ -5,6 +5,8 @@
 #include <QListWidget>
 #include <QLabel>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QCheckBox>
 #include <QPushButton>
 #include <vector>
 
@@ -27,10 +29,12 @@ public:
 
     void refresh(const std::vector<int>& filtered_indices, int current_index);
     void set_destination_folders(const QStringList& folders);
+    void update_item_status(int file_index);
 
 signals:
     void file_selected(int filtered_index);
     void files_assigned(const QList<int>& file_indices, const QString& destination);
+    void files_decision_changed(const QList<int>& file_indices, const QString& decision);
 
 private:
     void build_ui();
@@ -44,10 +48,11 @@ private:
     int current_index_;
     QStringList destination_folders_;
 
-    QLineEdit* filter_edit_;
-    QListWidget* list_widget_;
-    QLabel* count_label_;
-    QLabel* selection_label_;
+    QLineEdit* filter_edit_ = nullptr;
+    QCheckBox* group_by_decision_ = nullptr;
+    QListWidget* list_widget_ = nullptr;
+    QLabel* count_label_ = nullptr;
+    QLabel* selection_label_ = nullptr;
 };
 
 #endif // FILE_LIST_WINDOW_HPP

@@ -50,6 +50,8 @@ void DuplicateDetectionWindow::build_ui() {
         "QTreeWidget::item:selected { background-color: #0078d4; }"
         "QTreeWidget::item:alternate { background-color: #252525; }");
     tree_->header()->setStretchLastSection(true);
+    tree_->setSortingEnabled(true);
+    tree_->sortByColumn(0, Qt::AscendingOrder);
     layout->addWidget(tree_, 1);
 
     status_label_ = new QLabel();
@@ -59,7 +61,7 @@ void DuplicateDetectionWindow::build_ui() {
     // Buttons
     auto* btn_row = new QHBoxLayout();
 
-    verify_btn_ = new QPushButton("Verify with Hash (MD5)");
+    verify_btn_ = new QPushButton("Verify with Hash (SHA-256)");
     verify_btn_->setStyleSheet(
         "QPushButton { padding: 6px 14px; background-color: #2980b9; color: white; border: none; border-radius: 3px; }"
         "QPushButton:hover { background-color: #3498db; }");
@@ -67,6 +69,14 @@ void DuplicateDetectionWindow::build_ui() {
     btn_row->addWidget(verify_btn_);
 
     btn_row->addStretch();
+
+    auto* keep_newest_btn = new QPushButton("Keep Newest");
+    keep_newest_btn->setStyleSheet(
+        "QPushButton { background-color: #27ae60; color: white; padding: 6px 12px; border-radius: 4px; }"
+        "QPushButton:hover { background-color: #2ecc71; }");
+    keep_newest_btn->setToolTip("Select all duplicates except the newest file in each group for deletion");
+    connect(keep_newest_btn, &QPushButton::clicked, this, &DuplicateDetectionWindow::on_keep_newest);
+    btn_row->addWidget(keep_newest_btn);
 
     delete_btn_ = new QPushButton("Delete Selected");
     delete_btn_->setStyleSheet(
@@ -89,11 +99,34 @@ void DuplicateDetectionWindow::build_ui() {
     // Enable delete button when items are selected
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this]() {
         int count = 0;
+        qint64 total_selected_size = 0;
         for (auto* item : tree_->selectedItems()) {
-            if (item->parent()) ++count; // Only count child items (files)
+            if (item->parent()) {
+                ++count;
+                int fi = item->data(0, Qt::UserRole).toInt();
+                if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                    total_selected_size += files_[fi].size;
+                }
+            }
         }
         delete_btn_->setEnabled(count > 0);
         delete_btn_->setText(count > 0 ? QString("Delete Selected (%1)").arg(count) : "Delete Selected");
+        if (count > 0) {
+            delete_btn_->setStyleSheet(
+                "QPushButton { background-color: #c0392b; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px; }"
+                "QPushButton:hover { background-color: #e74c3c; }");
+            QString size_str;
+            if (total_selected_size < 1024LL) size_str = QString("%1 B").arg(total_selected_size);
+            else if (total_selected_size < 1024LL*1024) size_str = QString("%1 KB").arg(total_selected_size/1024.0, 0, 'f', 1);
+            else if (total_selected_size < 1024LL*1024*1024) size_str = QString("%1 MB").arg(total_selected_size/(1024.0*1024.0), 0, 'f', 1);
+            else size_str = QString("%1 GB").arg(total_selected_size/(1024.0*1024.0*1024.0), 0, 'f', 2);
+            status_label_->setText(QString("%1 file(s) selected — %2 recoverable space")
+                                   .arg(count).arg(size_str));
+        } else {
+            delete_btn_->setStyleSheet(
+                "QPushButton { background-color: #e74c3c; color: white; padding: 6px 16px; border-radius: 4px; }"
+                "QPushButton:hover { background-color: #c0392b; }");
+        }
     });
 }
 
@@ -164,7 +197,7 @@ void DuplicateDetectionWindow::detect_duplicates() {
 QByteArray DuplicateDetectionWindow::compute_file_hash(const QString& path) const {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) return QByteArray();
-    QCryptographicHash hasher(QCryptographicHash::Md5);
+    QCryptographicHash hasher(QCryptographicHash::Sha256);
     // Read in 64KB chunks for efficiency
     while (!file.atEnd()) {
         hasher.addData(file.read(65536));
@@ -206,7 +239,7 @@ void DuplicateDetectionWindow::on_verify_with_hash() {
 
         auto* group_item = new QTreeWidgetItem();
         const auto& first_file = files_[it.value().first()];
-        group_item->setText(0, QString("%1 (%2 identical copies, MD5 verified)")
+        group_item->setText(0, QString("%1 (%2 identical copies, SHA-256 verified)")
                                 .arg(first_file.name).arg(it.value().size()));
         group_item->setFlags(group_item->flags() & ~Qt::ItemIsSelectable);
         group_item->setForeground(0, QColor("#2ecc71"));
@@ -233,7 +266,7 @@ void DuplicateDetectionWindow::on_verify_with_hash() {
     }
 
     tree_->resizeColumnToContents(0);
-    verify_btn_->setText("Verified (MD5)");
+    verify_btn_->setText("Verified (SHA-256)");
     status_label_->setText(QString("%1 hash-verified duplicate groups (%2 total files)")
                            .arg(groups_.size()).arg(total_dupes));
 }
@@ -262,6 +295,40 @@ void DuplicateDetectionWindow::on_delete_selected() {
             item->setText(0, item->text(0) + " [marked for delete]");
             item->setSelected(false);
             item->setDisabled(true);
+        }
+    }
+}
+
+void DuplicateDetectionWindow::on_keep_newest() {
+    tree_->clearSelection();
+
+    for (int g = 0; g < tree_->topLevelItemCount(); ++g) {
+        auto* group_item = tree_->topLevelItem(g);
+        if (group_item->childCount() < 2) continue;
+
+        // Find the child with the newest modification date
+        int newest_idx = 0;
+        QDateTime newest_dt;
+        for (int c = 0; c < group_item->childCount(); ++c) {
+            auto* child = group_item->child(c);
+            if (child->isDisabled()) continue;
+            int fi = child->data(0, Qt::UserRole).toInt();
+            if (fi >= 0 && fi < static_cast<int>(files_.size())) {
+                const QDateTime& dt = files_[fi].modified_datetime;
+                if (!newest_dt.isValid() || dt > newest_dt) {
+                    newest_dt = dt;
+                    newest_idx = c;
+                }
+            }
+        }
+
+        // Select all children except the newest
+        for (int c = 0; c < group_item->childCount(); ++c) {
+            auto* child = group_item->child(c);
+            if (child->isDisabled()) continue;
+            if (c != newest_idx) {
+                child->setSelected(true);
+            }
         }
     }
 }

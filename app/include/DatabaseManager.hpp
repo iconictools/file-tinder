@@ -10,8 +10,9 @@
 
 struct FileDecision {
     QString file_path;
-    QString decision;  // "keep", "delete", "skip", "move"
+    QString decision;  // "keep", "delete", "sort_later", "move", "copy"
     QString destination_folder;
+    QString decided_in_mode;
     qint64 timestamp;
 };
 
@@ -39,7 +40,8 @@ public:
     
     // File Tinder state management
     bool save_file_decision(const QString& session_folder, const QString& file_path, 
-                           const QString& decision, const QString& destination = "");
+                           const QString& decision, const QString& destination = "",
+                           const QString& decided_in_mode = QString());
     std::vector<FileDecision> get_session_decisions(const QString& session_folder);
     bool clear_session(const QString& session_folder);
     FileDecision get_file_decision(const QString& session_folder, const QString& file_path);
@@ -66,12 +68,18 @@ public:
     bool save_quick_access_folders(const QString& session_folder, const QStringList& folders);
     QStringList get_quick_access_folders(const QString& session_folder);
     
+    // Session source folders (multi-folder persistence)
+    bool save_source_folders(const QString& session_folder, const QStringList& folders);
+    QStringList get_source_folders(const QString& session_folder);
+    
     // Execution log (for undo support)
     bool save_execution_log(const QString& session_folder, const QString& action,
                            const QString& source_path, const QString& dest_path);
     std::vector<std::tuple<int, QString, QString, QString, QString>> get_execution_log(const QString& session_folder);
+    std::vector<std::tuple<int, QString, QString, QString, QString>> get_all_execution_logs();
     bool remove_execution_log_entry(int id);
     bool clear_execution_log(const QString& session_folder);
+    bool clear_all_execution_logs();
     
     // Grid configuration save/load
     bool save_grid_config(const QString& session_folder, const QString& config_name,

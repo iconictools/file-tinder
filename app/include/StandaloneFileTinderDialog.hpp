@@ -1,7 +1,7 @@
 #ifndef STANDALONE_FILE_TINDER_DIALOG_HPP
 #define STANDALONE_FILE_TINDER_DIALOG_HPP
 
-#include <QDialog>
+#include <QWidget>
 #include <QLabel>
 #include <QPushButton>
 #include <QProgressBar>
@@ -11,10 +11,13 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QCheckBox>
+#include <QSpinBox>
 #include <QString>
 #include <QStringList>
 #include <QDateTime>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QPointer>
 #include <vector>
 #include <memory>
 
@@ -22,6 +25,8 @@ class DatabaseManager;
 class QPropertyAnimation;
 class QGraphicsOpacityEffect;
 class ImagePreviewWindow;
+class FileListWindow;
+class FilterWidget;
 struct ExecutionResult;
 
 // Action record for undo functionality
@@ -39,9 +44,10 @@ struct FileToProcess {
     qint64 size;
     QString modified_date;
     QDateTime modified_datetime;  // For sorting
-    QString decision;           // "pending", "keep", "delete", "skip", "move"
+    QString decision;           // "pending", "keep", "delete", "sort_later", "move"
     QString destination_folder; // For move operations
     QString mime_type;          // MIME type for filtering
+    QString decided_in_mode;    // Which mode made the decision
     bool is_directory;          // For folder support
     bool has_duplicate = false; // Cached: another file shares same name+size
 };
@@ -72,18 +78,21 @@ enum class SortOrder {
     Descending
 };
 
-class StandaloneFileTinderDialog : public QDialog {
+class StandaloneFileTinderDialog : public QWidget {
     Q_OBJECT
 
 public:
     explicit StandaloneFileTinderDialog(const QString& source_folder,
                                          DatabaseManager& db,
-                                         QWidget* parent = nullptr);
+                                         QWidget* parent = nullptr,
+                                         const QStringList& additional_sources = {});
     ~StandaloneFileTinderDialog() override;
     
     // Initialize the dialog - must be called after construction
     // This allows derived classes to properly initialize before UI setup
     virtual void initialize();
+    
+    const QString& source_folder() const { return source_folder_; }
     
 protected:
     // File management
@@ -91,12 +100,16 @@ protected:
     std::vector<int> filtered_indices_;  // Indices into files_ after filtering
     int current_filtered_index_;         // Current position in filtered list
     QString source_folder_;
+    QStringList source_folders_;  // All source folders (including source_folder_)
     DatabaseManager& db_;
     FileFilterType current_filter_;
     
     // Sorting
     FileSortField sort_field_;
     SortOrder sort_order_;
+    
+    // Mode tracking
+    QString mode_name_ = "Basic";
     
     // Custom filter
     QStringList custom_extensions_;
@@ -105,15 +118,19 @@ protected:
     // Statistics
     int keep_count_;
     int delete_count_;
-    int skip_count_;
+    int sort_later_count_;
     int move_count_;
     int copy_count_ = 0;
     
-    // Undo stack
+    // Undo/redo stacks
     std::vector<ActionRecord> undo_stack_;
+    std::vector<ActionRecord> redo_stack_;
     
     // Image preview window (for separate window mode)
     ImagePreviewWindow* image_preview_window_;
+
+    // File list window (for real-time status updates)
+    QPointer<FileListWindow> file_list_window_;
     
     // UI Components
     QLabel* preview_label_;
@@ -122,20 +139,17 @@ protected:
     QLabel* progress_label_;
     QLabel* stats_label_;
     QProgressBar* progress_bar_;
-    QComboBox* filter_combo_;
-    QComboBox* sort_combo_;        // Sort field selector
-    QPushButton* sort_order_btn_;  // Asc/Desc toggle
-    QCheckBox* folders_checkbox_;  // Include folders toggle
+    FilterWidget* filter_widget_ = nullptr;  // Unified filter/sort/subfolder component
     QLabel* shortcuts_label_;
     QLabel* file_position_label_;
     QLabel* size_badge_label_;
     QLineEdit* search_box_;
     
-    QPushButton* back_btn_;
     QPushButton* delete_btn_;
-    QPushButton* skip_btn_;
+    QPushButton* sort_later_btn_;
     QPushButton* keep_btn_;
     QPushButton* undo_btn_;        // Undo button (replaces move_btn_)
+    QPushButton* redo_btn_;        // Redo button
     QPushButton* preview_btn_;     // Image preview in separate window
     QPushButton* finish_btn_;
     QPushButton* switch_mode_btn_;
@@ -148,9 +162,15 @@ protected:
     // Resize debounce timer
     QTimer* resize_timer_;
     
+    // Preview caching — avoid reloading same file on filter/sort changes
+    QString current_preview_path_;
+    
     // Close guard to prevent re-entrant close
     bool closing_ = false;
     bool animating_ = false;
+    
+    // Session timing for review pace
+    QElapsedTimer session_timer_;
     
     // Initialization
     virtual void setup_ui();
@@ -185,10 +205,10 @@ protected:
     // Actions
     virtual void on_keep();
     virtual void on_delete();
-    virtual void on_skip();
-    virtual void on_back();
+    virtual void on_sort_later();
     virtual void on_search(const QString& text);
     virtual void on_undo();           // Undo last action
+    virtual void on_redo();           // Redo last undone action
     virtual void on_show_preview();   // Open image in separate window
     virtual void on_finish();
     void advance_to_next();
@@ -200,8 +220,8 @@ protected:
     void update_decision_count(const QString& old_decision, int delta);
     int get_current_file_index() const;  // Get actual file index from filtered index
     
-    // Folder picker
-    QString show_folder_picker();
+    // File list window helper — single creation point for button & F key
+    void open_file_list_window();
     
     // Review screen
     void show_review_summary();
@@ -219,13 +239,14 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;  // New: handle resize
-    void reject() override;  // Override to route Escape/close through save logic
+    void request_close();  // Handles save-prompt logic, emits request_back
     bool eventFilter(QObject* obj, QEvent* event) override;  // Double-click to open file
     
 signals:
     void session_completed();
     void switch_to_advanced_mode();
     void switch_to_ai_mode();
+    void request_back();
     
 protected slots:
     void on_switch_mode_clicked();

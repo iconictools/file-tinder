@@ -8,6 +8,8 @@
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QMessageBox>
+#include <QFrame>
+#include <QRegularExpression>
 
 // ============================================================================
 // CustomExtensionDialog
@@ -16,7 +18,7 @@
 CustomExtensionDialog::CustomExtensionDialog(QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle("Specify Extensions");
+    setWindowTitle("Custom File Extensions");
     setMinimumSize(ui::scaling::scaled(300), ui::scaling::scaled(250));
 
     auto* layout = new QVBoxLayout(this);
@@ -30,12 +32,15 @@ CustomExtensionDialog::CustomExtensionDialog(QWidget* parent)
     extension_input_ = new QLineEdit();
     extension_input_->setPlaceholderText("e.g., txt, pdf, docx");
     add_btn_ = new QPushButton("Add");
+    add_btn_->setStyleSheet("QPushButton { background-color: #3498db; color: white; padding: 4px 12px; border-radius: 3px; }"
+                          "QPushButton:hover { background-color: #2980b9; }");
     input_row->addWidget(extension_input_);
     input_row->addWidget(add_btn_);
     layout->addLayout(input_row);
 
     // Extension list
     extension_list_ = new QListWidget();
+    extension_list_->setStyleSheet("QListWidget { border: 1px solid #555; border-radius: 3px; }");
     layout->addWidget(extension_list_);
 
     // Remove button
@@ -54,20 +59,26 @@ CustomExtensionDialog::CustomExtensionDialog(QWidget* parent)
     // Connections
     connect(add_btn_, &QPushButton::clicked, this, [this]() {
         QString ext = extension_input_->text().trimmed().toLower();
-        if (!ext.isEmpty()) {
-            // Remove leading dot if present
-            if (ext.startsWith('.')) {
-                ext = ext.mid(1);
-            }
-            // Check if already exists
-            for (int i = 0; i < extension_list_->count(); ++i) {
-                if (extension_list_->item(i)->text() == ext) {
-                    return;
-                }
-            }
-            extension_list_->addItem(ext);
-            extension_input_->clear();
+        if (ext.isEmpty()) return;
+
+        if (ext.contains(' ') || ext.length() > 10) {
+            return; // Invalid extension
         }
+
+        QStringList parts = ext.split(QRegularExpression("[,;\\s]+"), Qt::SkipEmptyParts);
+        for (QString& part : parts) {
+            part = part.trimmed();
+            if (part.startsWith('.')) part = part.mid(1);
+            if (!part.isEmpty() && part.length() <= 10 && !part.contains(' ')) {
+                // Check for duplicates
+                bool found = false;
+                for (int i = 0; i < extension_list_->count(); ++i) {
+                    if (extension_list_->item(i)->text() == part) { found = true; break; }
+                }
+                if (!found) extension_list_->addItem(part);
+            }
+        }
+        extension_input_->clear();
     });
 
     connect(extension_input_, &QLineEdit::returnPressed, add_btn_, &QPushButton::click);
@@ -113,7 +124,7 @@ FilterWidget::FilterWidget(QWidget* parent)
 
 void FilterWidget::setup_ui() {
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(0, 2, 0, 2);
     layout->setSpacing(8);
 
     // Filter section
@@ -133,12 +144,51 @@ void FilterWidget::setup_ui() {
     filter_combo_->setMinimumWidth(100);
     layout->addWidget(filter_combo_);
 
-    // Include folders checkbox
-    include_folders_check_ = new QCheckBox("Include Folders");
-    layout->addWidget(include_folders_check_);
+    // Clear filter button
+    auto* clear_filter_btn = new QPushButton("X");
+    clear_filter_btn->setMaximumWidth(ui::scaling::scaled(24));
+    clear_filter_btn->setMaximumHeight(ui::scaling::scaled(24));
+    clear_filter_btn->setToolTip("Clear filter");
+    clear_filter_btn->setStyleSheet("QPushButton { font-size: 10px; color: #e74c3c; border: 1px solid #555; border-radius: 3px; padding: 0; }"
+                                    "QPushButton:hover { background-color: #5d3a37; }");
+    connect(clear_filter_btn, &QPushButton::clicked, this, [this]() {
+        filter_combo_->setCurrentIndex(0);
+    });
+    layout->addWidget(clear_filter_btn);
 
-    // Spacer
-    layout->addSpacing(16);
+    // Subfolder options — stacked vertically beside filter
+    auto* subfolder_col = new QVBoxLayout();
+    subfolder_col->setContentsMargins(0, 0, 0, 0);
+    subfolder_col->setSpacing(1);
+
+    include_folders_check_ = new QCheckBox("Include Folders");
+    include_folders_check_->setStyleSheet("font-size: 11px;");
+    subfolder_col->addWidget(include_folders_check_);
+
+    auto* depth_row = new QHBoxLayout();
+    depth_row->setContentsMargins(0, 0, 0, 0);
+    depth_row->setSpacing(4);
+    auto* depth_label = new QLabel("Depth:");
+    depth_label->setStyleSheet("font-size: 11px; color: #95a5a6;");
+    depth_row->addWidget(depth_label);
+    subfolder_depth_spin_ = new QSpinBox();
+    subfolder_depth_spin_->setRange(0, 5);
+    subfolder_depth_spin_->setValue(1);
+    subfolder_depth_spin_->setMaximumWidth(ui::scaling::scaled(45));
+    subfolder_depth_spin_->setToolTip("How many levels of subfolders to include (0 = top-level only)");
+    subfolder_depth_spin_->setEnabled(false);
+    depth_row->addWidget(subfolder_depth_spin_);
+    depth_row->addStretch();
+    subfolder_col->addLayout(depth_row);
+
+    layout->addLayout(subfolder_col);
+
+    // Visual separator
+    auto* separator = new QFrame();
+    separator->setFrameShape(QFrame::VLine);
+    separator->setFrameShadow(QFrame::Sunken);
+    separator->setStyleSheet("color: #555;");
+    layout->addWidget(separator);
 
     // Sort section
     auto* sort_label = new QLabel("Sort:");
@@ -154,9 +204,11 @@ void FilterWidget::setup_ui() {
 
     // Sort order button
     sort_order_btn_ = new QPushButton("Asc");
-    sort_order_btn_->setFixedWidth(50);
+    sort_order_btn_->setMinimumWidth(ui::scaling::scaled(50));
     sort_order_btn_->setCheckable(true);
     sort_order_btn_->setToolTip("Toggle Ascending/Descending");
+    sort_order_btn_->setStyleSheet("QPushButton { padding: 3px 8px; border: 1px solid #555; border-radius: 3px; }"
+                                   "QPushButton:hover { background-color: #3d566e; }");
     layout->addWidget(sort_order_btn_);
 
     layout->addStretch();
@@ -170,6 +222,19 @@ void FilterWidget::setup_ui() {
             this, &FilterWidget::on_sort_order_toggled);
     connect(include_folders_check_, &QCheckBox::toggled,
             this, &FilterWidget::on_include_folders_toggled);
+    connect(include_folders_check_, &QCheckBox::toggled,
+            subfolder_depth_spin_, &QSpinBox::setEnabled);
+    connect(subfolder_depth_spin_, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int depth) { emit subfolder_depth_changed(depth); });
+
+    // Active filter highlight
+    connect(filter_combo_, &QComboBox::currentTextChanged, this, [this](const QString& text) {
+        if (text == "All Files" || text == "All") {
+            filter_combo_->setStyleSheet("");
+        } else {
+            filter_combo_->setStyleSheet("QComboBox { border: 2px solid #3498db; background-color: #1a3a5c; }");
+        }
+    });
 }
 
 void FilterWidget::on_filter_changed(int index) {
@@ -279,4 +344,12 @@ void FilterWidget::set_include_folders(bool include) {
 
 void FilterWidget::set_custom_extensions(const QStringList& extensions) {
     custom_extensions_ = extensions;
+}
+
+int FilterWidget::get_subfolder_depth() const {
+    return subfolder_depth_spin_->value();
+}
+
+void FilterWidget::set_subfolder_depth(int depth) {
+    subfolder_depth_spin_->setValue(depth);
 }

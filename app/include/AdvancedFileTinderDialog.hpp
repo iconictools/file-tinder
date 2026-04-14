@@ -16,16 +16,23 @@ class AdvancedFileTinderDialog : public StandaloneFileTinderDialog {
 public:
     explicit AdvancedFileTinderDialog(const QString& source_folder,
                                        DatabaseManager& db,
-                                       QWidget* parent = nullptr);
+                                       QWidget* parent = nullptr,
+                                       const QStringList& additional_sources = {},
+                                       FolderTreeModel* shared_folder_model = nullptr);
     ~AdvancedFileTinderDialog() override;
     
     void initialize() override;
+    
+    // Expose the folder model so the launcher can share it
+    FolderTreeModel* folder_model() const { return folder_model_; }
+    MindMapView* mind_map_view() const { return mind_map_view_; }
     
 protected:
     // Advanced mode components accessible to derived classes (AI Mode)
     MindMapView* mind_map_view_;
     QListWidget* quick_access_list_;
     FolderTreeModel* folder_model_;
+    QWidget* quick_access_panel_;
 
 private:
     // Advanced mode internal components
@@ -36,7 +43,6 @@ private:
     QLabel* file_name_label_;
     QLabel* file_details_label_;
     QLabel* adv_preview_label_;     // Small inline image preview
-    QWidget* quick_access_panel_;
     FilterWidget* filter_widget_;
     
     // Quick access management
@@ -90,8 +96,7 @@ protected:
 
 private:
     // Event handlers
-    void closeEvent(QCloseEvent* event) override;
-    void reject() override;
+    void request_close();  // saves grid state, then calls base
     bool eventFilter(QObject* obj, QEvent* event) override;
     
     // Keyboard shortcuts

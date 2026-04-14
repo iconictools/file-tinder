@@ -21,7 +21,7 @@ struct DuplicateGroup {
 // Accessed via ! button on file selector when duplicates detected.
 // Shows duplicate groups, allows multi-select and batch delete.
 // Uses sophisticated detection: name+size for initial grouping,
-// MD5 content hashing for verification.
+// SHA-256 content hashing for verification.
 class DuplicateDetectionWindow : public QDialog {
     Q_OBJECT
 
@@ -39,6 +39,7 @@ private:
     QByteArray compute_file_hash(const QString& path) const;
     void on_delete_selected();
     void on_verify_with_hash();
+    void on_keep_newest();
 
     std::vector<FileToProcess>& files_;
     QString source_folder_;

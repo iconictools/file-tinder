@@ -55,6 +55,7 @@ public:
     
     // Folder tree operations
     void set_root_folder(const QString& path);
+    QString root_folder() const { return root_ ? root_->path : QString(); }
     void add_folder(const QString& path, bool virtual_folder = false);
     void remove_folder(const QString& path);
     void set_folder_pinned(const QString& path, bool pinned);

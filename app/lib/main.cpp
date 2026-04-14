@@ -18,88 +18,35 @@
 #include <QHeaderView>
 #include <QFileInfo>
 #include <QMouseEvent>
+#include <QResizeEvent>
+#include <QScreen>
 #include <QTimer>
 #include <QMimeDatabase>
 #include <QProgressDialog>
-#include <QMap>
-#include <QCheckBox>
-#include <QDialogButtonBox>
-#include <QGroupBox>
-#include <QProcess>
-#include <QCoreApplication>
+#include <QStackedWidget>
 #include <QStandardPaths>
-#include <QUrl>
 #include <QDesktopServices>
-#include <QFile>
-#include <optional>
 
 #include "DatabaseManager.hpp"
 #include "StandaloneFileTinderDialog.hpp"
 #include "AdvancedFileTinderDialog.hpp"
 #include "AiFileTinderDialog.hpp"
+#include "FolderTreeModel.hpp"
 #include "FileTinderExecutor.hpp"
 #include "AppLogger.hpp"
-#include "DiagnosticTool.hpp"
 #include "ui_constants.hpp"
+#include "UserDataDialog.hpp"
 
-enum class AppModule {
-    Tinder,
-    Filer,
-    AiFiler
-};
-
-struct ModuleDescriptor {
-    AppModule module;
-    QString id;
-    QString app_name;
-    QString button_title;
-    QString description;
-    QStringList standalone_executables;
-};
-
-static const QUrl suite_releases_url("https://github.com/iconictools/file-tinder/releases");
-
-static const std::vector<ModuleDescriptor>& module_catalog() {
-    static const std::vector<ModuleDescriptor> catalog = {
-        {AppModule::Tinder, "tinder", "Iconic File Tinder",
-         "File Tinder\n(Swipe sorting)", "Core swipe-style file triage",
-         {"IconicFileTinder", "FileTinder", "iconic-file-tinder"}},
-        {AppModule::Filer, "filer", "Iconic File Filer",
-         "File Filer\n(Folder tree)", "Folder-mind-map filing workflow",
-         {"IconicFileFiler", "FileFiler", "iconic-file-filer"}},
-        {AppModule::AiFiler, "ai-filer", "Iconic File AI Filer",
-         "File AI Filer\n(AI-assisted)", "AI-assisted filing and category suggestions",
-         {"IconicFileAiFiler", "FileAiFiler", "iconic-file-ai-filer"}}
-    };
-    return catalog;
-}
-
-static std::optional<AppModule> module_from_argument_token(const QString& raw_value) {
-    const QString value = raw_value.trimmed().toLower();
-    for (const auto& descriptor : module_catalog()) {
-        if (value == descriptor.id) return descriptor.module;
-    }
-    if (value == "basic") return AppModule::Tinder;
-    if (value == "advanced") return AppModule::Filer;
-    if (value == "ai") return AppModule::AiFiler;
-    return std::nullopt;
-}
-
-class FileTinderLauncher : public QDialog {
+class FileTinderLauncher : public QWidget {
     Q_OBJECT
     
 public:
-    FileTinderLauncher(const QString& initial_folder = QString(),
-                      std::optional<AppModule> requested_module = std::nullopt,
-                      bool request_suite = false,
-                      QWidget* parent_widget = nullptr)
-        : QDialog(parent_widget)
+    FileTinderLauncher(QWidget* parent_widget = nullptr) 
+        : QWidget(parent_widget)
         , db_manager_()
-        , chosen_path_()
-        , requested_module_(requested_module)
-        , request_suite_launch_(request_suite) {
+        , chosen_path_() {
         
-        setWindowTitle("File Tinder Launcher");
+        setWindowTitle("File Tinder");
         setMinimumSize(ui::scaling::scaled(550), ui::scaling::scaled(450));
         
         LOG_INFO("Launcher", "Application starting");
@@ -115,130 +62,123 @@ public:
             }
         }
         
-        refresh_module_discovery();
+        // Set up the stacked widget architecture
+        stack_ = new QStackedWidget(this);
+        launcher_page_ = new QWidget();
         build_interface();
+        stack_->addWidget(launcher_page_);  // index 0
+        
+        auto* main_layout = new QVBoxLayout(this);
+        main_layout->setContentsMargins(0, 0, 0, 0);
+        main_layout->addWidget(stack_);
         
         // Load theme preference
         QSettings theme_settings("FileTinder", "FileTinder");
         is_dark_theme_ = theme_settings.value("darkTheme", true).toBool();
         apply_theme();
         
-        // Pre-fill folder
+        // Pre-fill last used folder if it still exists
         QSettings settings("FileTinder", "FileTinder");
-        QString prefilled_folder = initial_folder;
-        if (prefilled_folder.isEmpty()) {
-            prefilled_folder = settings.value("lastFolder").toString();
-        }
-        if (!prefilled_folder.isEmpty() && QDir(prefilled_folder).exists()) {
-            chosen_path_ = prefilled_folder;
-            path_indicator_->setText(prefilled_folder);
+        QString last_folder = settings.value("lastFolder").toString();
+        if (!last_folder.isEmpty() && QDir(last_folder).exists()) {
+            chosen_path_ = last_folder;
+            // Restore additional source folders from DB, fall back to primary folder
+            QStringList saved_folders = db_manager_.get_source_folders(last_folder);
+            source_folders_ = saved_folders.isEmpty() ? QStringList{last_folder} : saved_folders;
+            
+            path_indicator_->setText(last_folder);
             path_indicator_->setStyleSheet(
                 "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
             );
             
             // Check for resumable session
-            int progress = db_manager_.get_session_progress_count(prefilled_folder);
-            if (progress > 0 && resume_label_) {
-                resume_label_->setText(QString("Session in progress: %1 files sorted. Click a mode to resume.")
-                    .arg(progress));
-                resume_label_->setVisible(true);
-            }
+            check_session_state();
         }
-
-        QTimer::singleShot(0, this, [this]() { handle_initial_module_request(); });
     }
     
 private:
     DatabaseManager db_manager_;
     QString chosen_path_;
+    QStringList source_folders_;
     QLabel* path_indicator_;
     QListWidget* recent_list_ = nullptr;
+    QListWidget* multi_folder_list_ = nullptr;
+    QCheckBox* multi_folder_check_ = nullptr;
+    QPushButton* add_folder_btn_ = nullptr;
     QLabel* resume_label_ = nullptr;
-    QLabel* modules_status_label_ = nullptr;
     bool skip_stats_on_next_launch_ = false;  // Skip stats dashboard on mode switch
     bool is_dark_theme_ = true;
-    std::optional<AppModule> requested_module_;
-    bool request_suite_launch_ = false;
-    QMap<AppModule, QString> standalone_module_paths_;
-
-    QString module_display_name(AppModule module) const {
-        for (const auto& descriptor : module_catalog()) {
-            if (descriptor.module == module) return descriptor.app_name;
+    
+    // Stacked widget architecture
+    QStackedWidget* stack_ = nullptr;
+    QWidget* launcher_page_ = nullptr;
+    StandaloneFileTinderDialog* basic_widget_ = nullptr;
+    AdvancedFileTinderDialog* advanced_widget_ = nullptr;
+    AiFileTinderDialog* ai_widget_ = nullptr;
+    QSize launcher_size_;  // Saved launcher page size for restoring on return
+    FolderTreeModel* shared_folder_model_ = nullptr;  // Shared across all modes
+    
+    // Resize the window appropriately for the given mode, keeping it on screen
+    void resize_for_mode(const QString& mode) {
+        auto* screen = QApplication::primaryScreen();
+        if (!screen) return;
+        QRect avail = screen->availableGeometry();
+        int w, h;
+        if (mode == "basic") {
+            // Basic mode: 70% width, 70% height (min 600x380)
+            w = qMax(600, avail.width() * 70 / 100);
+            h = qMax(380, avail.height() * 70 / 100);
+        } else {
+            // Advanced and AI modes: 85% width, 80% height (min 780x550)
+            w = qMax(780, avail.width() * 85 / 100);
+            h = qMax(550, avail.height() * 80 / 100);
         }
-        return "Unknown Module";
+        // Never exceed screen
+        w = qMin(w, avail.width());
+        h = qMin(h, avail.height());
+        resize(w, h);
+        ensure_on_screen();
     }
-
-    QString module_id(AppModule module) const {
-        for (const auto& descriptor : module_catalog()) {
-            if (descriptor.module == module) return descriptor.id;
-        }
-        return "unknown";
+    
+    // Ensure the window stays fully within the available screen area
+    void ensure_on_screen() {
+        auto* screen = QApplication::primaryScreen();
+        if (!screen) return;
+        QRect avail = screen->availableGeometry();
+        QRect geo = geometry();
+        
+        // Clamp width/height to screen
+        if (geo.width() > avail.width())
+            geo.setWidth(avail.width());
+        if (geo.height() > avail.height())
+            geo.setHeight(avail.height());
+        
+        // Keep the window within screen bounds
+        if (geo.left() < avail.left())
+            geo.moveLeft(avail.left());
+        if (geo.top() < avail.top())
+            geo.moveTop(avail.top());
+        if (geo.right() > avail.right())
+            geo.moveRight(avail.right());
+        if (geo.bottom() > avail.bottom())
+            geo.moveBottom(avail.bottom());
+        
+        setGeometry(geo);
     }
-
-    QString module_button_title(AppModule module) const {
-        for (const auto& descriptor : module_catalog()) {
-            if (descriptor.module == module) return descriptor.button_title;
-        }
-        return module_display_name(module);
-    }
-
-    bool is_integrated_module_available(AppModule module) const {
-        Q_UNUSED(module);
-        return true;  // current build ships all modules in a single binary
-    }
-
-    bool is_module_available(AppModule module) const {
-        return is_integrated_module_available(module) || standalone_module_paths_.contains(module);
-    }
-
-    int available_module_count() const {
-        int available = 0;
-        for (const auto& descriptor : module_catalog()) {
-            if (is_module_available(descriptor.module)) available++;
-        }
-        return available;
-    }
-
-    void refresh_module_discovery() {
-        standalone_module_paths_.clear();
-        const QString app_dir = QCoreApplication::applicationDirPath();
-
-        for (const auto& descriptor : module_catalog()) {
-            for (const QString& executable : descriptor.standalone_executables) {
-                const QString local_path = QDir(app_dir).absoluteFilePath(executable);
-                if (QFile::exists(local_path)) {
-                    standalone_module_paths_[descriptor.module] = local_path;
-                    break;
-                }
-                const QString in_path = QStandardPaths::findExecutable(executable);
-                if (!in_path.isEmpty()) {
-                    standalone_module_paths_[descriptor.module] = in_path;
-                    break;
-                }
-            }
-        }
-        update_modules_status_label();
-    }
-
-    QString module_install_status(AppModule module) const {
-        if (standalone_module_paths_.contains(module)) {
-            return "Integrated + Standalone detected";
-        }
-        if (is_integrated_module_available(module)) {
-            return "Integrated";
-        }
-        return "Missing";
-    }
-
-    void update_modules_status_label() {
-        if (!modules_status_label_) return;
-        int standalone_count = standalone_module_paths_.size();
-        const int module_count = static_cast<int>(module_catalog().size());
-        modules_status_label_->setText(
-            QString("Module suite ready: %1 integrated modules • %2 standalone companion(s) detected")
-                .arg(module_count)
-                .arg(standalone_count)
-        );
+    
+    // Prevent the window from ever growing beyond the screen
+    void resizeEvent(QResizeEvent* event) override {
+        QWidget::resizeEvent(event);
+        auto* screen = QApplication::primaryScreen();
+        if (!screen) return;
+        QRect avail = screen->availableGeometry();
+        bool clamped = false;
+        int w = width(), h = height();
+        if (w > avail.width())  { w = avail.width(); clamped = true; }
+        if (h > avail.height()) { h = avail.height(); clamped = true; }
+        if (clamped) resize(w, h);
+        // Keep title bar accessible
+        if (y() < avail.top()) move(x(), avail.top());
     }
     
     void apply_theme() {
@@ -254,17 +194,32 @@ private:
             p.setColor(QPalette::Highlight, QColor(0, 120, 212));
             p.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
         } else {
-            p.setColor(QPalette::Window, QColor(240, 240, 240));
-            p.setColor(QPalette::WindowText, QColor(30, 30, 30));
+            p.setColor(QPalette::Window, QColor(248, 249, 250));
+            p.setColor(QPalette::WindowText, QColor(33, 37, 41));
             p.setColor(QPalette::Base, QColor(255, 255, 255));
-            p.setColor(QPalette::AlternateBase, QColor(235, 235, 235));
-            p.setColor(QPalette::Text, QColor(30, 30, 30));
-            p.setColor(QPalette::Button, QColor(225, 225, 225));
-            p.setColor(QPalette::ButtonText, QColor(30, 30, 30));
-            p.setColor(QPalette::Highlight, QColor(0, 120, 212));
+            p.setColor(QPalette::AlternateBase, QColor(241, 243, 245));
+            p.setColor(QPalette::Text, QColor(33, 37, 41));
+            p.setColor(QPalette::Button, QColor(233, 236, 239));
+            p.setColor(QPalette::ButtonText, QColor(33, 37, 41));
+            p.setColor(QPalette::Highlight, QColor(13, 110, 253));
             p.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+            p.setColor(QPalette::ToolTipBase, QColor(255, 255, 255));
+            p.setColor(QPalette::ToolTipText, QColor(33, 37, 41));
+            p.setColor(QPalette::PlaceholderText, QColor(108, 117, 125));
+            p.setColor(QPalette::Link, QColor(13, 110, 253));
+            p.setColor(QPalette::Disabled, QPalette::Text, QColor(173, 181, 189));
+            p.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(173, 181, 189));
         }
         QApplication::setPalette(p);
+        if (is_dark_theme_) {
+            qApp->setStyleSheet(
+                "QToolTip { background-color: #2d2d2d; color: #e6e6e6; border: 1px solid #555; }"
+            );
+        } else {
+            qApp->setStyleSheet(
+                "QToolTip { background-color: #f5f5f5; color: #333; border: 1px solid #ccc; }"
+            );
+        }
     }
     
     bool eventFilter(QObject* obj, QEvent* event) override {
@@ -281,21 +236,21 @@ private:
                 }
             }
         }
-        return QDialog::eventFilter(obj, event);
+        return QWidget::eventFilter(obj, event);
     }
     
     void build_interface() {
-        auto* root_layout = new QVBoxLayout(this);
+        auto* root_layout = new QVBoxLayout(launcher_page_);
         root_layout->setContentsMargins(25, 25, 25, 25);
         root_layout->setSpacing(18);
         
         // App header
-        auto* app_title = new QLabel("FILE TINDER SUITE");
+        auto* app_title = new QLabel("FILE TINDER");
         app_title->setStyleSheet("font-size: 28px; font-weight: bold; color: #0078d4;");
         app_title->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_title);
         
-        auto* app_desc = new QLabel("Modular launcher for File Tinder, File Filer, and File AI Filer");
+        auto* app_desc = new QLabel("Organize files with swipe-style sorting");
         app_desc->setStyleSheet("font-size: 13px; color: #888888;");
         app_desc->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_desc);
@@ -303,7 +258,7 @@ private:
         root_layout->addSpacing(15);
         
         // Folder picker section
-        auto* picker_label = new QLabel("Choose folder to organize:");
+        auto* picker_label = new QLabel("Select Folder to Organize");
         picker_label->setStyleSheet("font-weight: bold; font-size: 12px;");
         root_layout->addWidget(picker_label);
         
@@ -326,10 +281,80 @@ private:
         
         root_layout->addLayout(picker_row);
         
+        // Multiple folders checkbox
+        multi_folder_check_ = new QCheckBox("Multiple Folders");
+        multi_folder_check_->setStyleSheet("color: #aaaaaa; font-size: 11px;");
+        multi_folder_check_->setToolTip("Enable to scan files from multiple source folders");
+        root_layout->addWidget(multi_folder_check_);
+        
+        // Multi-folder list (hidden by default)
+        multi_folder_list_ = new QListWidget();
+        multi_folder_list_->setMaximumHeight(ui::scaling::scaled(80));
+        multi_folder_list_->setStyleSheet(
+            "QListWidget { background-color: #2d2d2d; border: 1px solid #404040; color: #aaaaaa; }"
+            "QListWidget::item { padding: 3px 8px; }"
+            "QListWidget::item:hover { background-color: #3a3a3a; }"
+            "QListWidget::item:selected { background-color: #0078d4; color: white; }"
+        );
+        multi_folder_list_->setContextMenuPolicy(Qt::CustomContextMenu);
+        multi_folder_list_->setVisible(false);
+        connect(multi_folder_list_, &QListWidget::customContextMenuRequested, this,
+                [this](const QPoint& pos) {
+            auto* item = multi_folder_list_->itemAt(pos);
+            if (!item) return;
+            QMenu menu(this);
+            auto* remove_action = menu.addAction("Remove");
+            if (menu.exec(multi_folder_list_->mapToGlobal(pos)) == remove_action) {
+                // Prevent removing the last folder
+                if (source_folders_.size() <= 1) return;
+                QString path = item->text();
+                delete multi_folder_list_->takeItem(multi_folder_list_->row(item));
+                source_folders_.removeAll(path);
+                update_multi_folder_display();
+            }
+        });
+        root_layout->addWidget(multi_folder_list_);
+        
+        // Add Folder button (hidden by default)
+        add_folder_btn_ = new QPushButton("Add Folder...");
+        add_folder_btn_->setStyleSheet(
+            "QPushButton { padding: 4px 12px; background-color: #3a3a3a; color: #aaaaaa; border: 1px solid #555555; }"
+            "QPushButton:hover { background-color: #4a4a4a; }"
+        );
+        add_folder_btn_->setVisible(false);
+        connect(add_folder_btn_, &QPushButton::clicked, this, [this]() {
+            QString path = QFileDialog::getExistingDirectory(this, "Add Source Folder", QDir::homePath());
+            if (!path.isEmpty() && !source_folders_.contains(path)) {
+                source_folders_.append(path);
+                update_multi_folder_display();
+            }
+        });
+        root_layout->addWidget(add_folder_btn_);
+        
+        connect(multi_folder_check_, &QCheckBox::toggled, this, [this](bool checked) {
+            add_folder_btn_->setVisible(checked);
+            if (checked) {
+                // Seed source_folders_ with current chosen_path_ if not empty
+                if (!chosen_path_.isEmpty() && !source_folders_.contains(chosen_path_)) {
+                    source_folders_.prepend(chosen_path_);
+                }
+            } else {
+                // Revert to single-folder mode: keep only primary
+                if (!source_folders_.isEmpty()) {
+                    chosen_path_ = source_folders_.first();
+                }
+                source_folders_.clear();
+                if (!chosen_path_.isEmpty()) {
+                    source_folders_.append(chosen_path_);
+                }
+            }
+            update_multi_folder_display();
+        });
+        
         // Recent folders list (middle-click to remove)
         QStringList recent = db_manager_.get_recent_folders(5);
         if (!recent.isEmpty()) {
-            auto* recent_label = new QLabel("Recent folders (click to select, middle-click to remove):");
+            auto* recent_label = new QLabel("Recent Folders (click to select, middle-click to remove):");
             recent_label->setStyleSheet("color: #888888; font-size: 10px;");
             root_layout->addWidget(recent_label);
             
@@ -349,11 +374,20 @@ private:
                     [this, recent_list](QListWidgetItem* item) {
                 QString path = item->text();
                 if (QDir(path).exists()) {
-                    chosen_path_ = path;
-                    path_indicator_->setText(path);
-                    path_indicator_->setStyleSheet(
-                        "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
-                    );
+                    if (multi_folder_check_ && multi_folder_check_->isChecked()) {
+                        // In multi-folder mode, add to source list
+                        if (!source_folders_.contains(path)) {
+                            source_folders_.append(path);
+                            update_multi_folder_display();
+                        }
+                    } else {
+                        chosen_path_ = path;
+                        source_folders_ = {path};
+                        path_indicator_->setText(path);
+                        path_indicator_->setStyleSheet(
+                            "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+                        );
+                    }
                 } else {
                     QMessageBox::warning(this, "Folder Not Found",
                         QString("The folder no longer exists:\n%1").arg(path));
@@ -364,6 +398,7 @@ private:
             // Middle-click to remove
             recent_list->viewport()->installEventFilter(this);
             recent_list_ = recent_list;
+            recent_list_->setToolTip("Click to select. Middle-click to remove.");
             root_layout->addWidget(recent_list);
         }
         
@@ -377,15 +412,15 @@ private:
         resume_label_->setVisible(false);
         root_layout->addWidget(resume_label_);
         
-        // Module launch buttons
-        auto* modes_label = new QLabel("Choose module:");
+        // Mode buttons
+        auto* modes_label = new QLabel("Sorting Mode");
         modes_label->setStyleSheet("font-weight: bold; font-size: 12px;");
         root_layout->addWidget(modes_label);
         
         auto* modes_row = new QHBoxLayout();
         modes_row->setSpacing(12);
         
-        auto* basic_mode_btn = new QPushButton(module_button_title(AppModule::Tinder));
+        auto* basic_mode_btn = new QPushButton("Basic Mode\n(Keep / Delete / Sort Later)");
         basic_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         basic_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #107c10; color: white; border: none; font-size: 13px; }"
@@ -394,7 +429,7 @@ private:
         connect(basic_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
         modes_row->addWidget(basic_mode_btn);
         
-        auto* adv_mode_btn = new QPushButton(module_button_title(AppModule::Filer));
+        auto* adv_mode_btn = new QPushButton("Advanced Mode\n(Folder grid + assignment)");
         adv_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         adv_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #5c2d91; color: white; border: none; font-size: 13px; }"
@@ -403,7 +438,7 @@ private:
         connect(adv_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
         modes_row->addWidget(adv_mode_btn);
         
-        auto* ai_mode_btn = new QPushButton(module_button_title(AppModule::AiFiler));
+        auto* ai_mode_btn = new QPushButton("AI Mode\n(Auto-sort with AI suggestions)");
         ai_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         ai_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #2980b9; color: white; border: none; font-size: 13px; }"
@@ -413,36 +448,8 @@ private:
         modes_row->addWidget(ai_mode_btn);
         
         root_layout->addLayout(modes_row);
-
-        auto* suite_row = new QHBoxLayout();
-
-        auto* launch_suite_btn = new QPushButton("Launch Suite...");
-        launch_suite_btn->setStyleSheet(
-            "QPushButton { padding: 8px 14px; background-color: #0b5fa5; color: white; border: none; font-size: 12px; }"
-            "QPushButton:hover { background-color: #0a4f8a; }"
-        );
-        connect(launch_suite_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_suite_selector);
-        suite_row->addWidget(launch_suite_btn);
-
-        auto* modules_btn = new QPushButton("Manage Modules...");
-        modules_btn->setStyleSheet(
-            "QPushButton { padding: 8px 14px; background-color: #4a4a4a; color: #e0e0e0; border: 1px solid #555555; font-size: 12px; }"
-            "QPushButton:hover { background-color: #555555; }"
-        );
-        connect(modules_btn, &QPushButton::clicked, this, &FileTinderLauncher::open_module_manager);
-        suite_row->addWidget(modules_btn);
-        suite_row->addStretch();
-
-        root_layout->addLayout(suite_row);
-
-        modules_status_label_ = new QLabel();
-        modules_status_label_->setStyleSheet(
-            "padding: 6px 10px; background-color: #1d2b3a; border: 1px solid #35526f; "
-            "color: #8ec7ff; font-size: 10px; border-radius: 4px;");
-        root_layout->addWidget(modules_status_label_);
-        update_modules_status_label();
         
-        // Tools row: Clear Session + Undo History + Diagnostics
+        // Tools row: Clear Session + Undo History + User Data
         auto* tools_row = new QHBoxLayout();
         
         auto* clear_btn = new QPushButton("Clear Session");
@@ -478,18 +485,40 @@ private:
         });
         tools_row->addWidget(theme_btn);
         
-        auto* diag_btn = new QPushButton("Diagnostics");
-        diag_btn->setStyleSheet(
+        auto* user_data_btn = new QPushButton("User Data");
+        user_data_btn->setStyleSheet(
             "QPushButton { padding: 6px 12px; background-color: #4a4a4a; color: #cccccc; border: 1px solid #555555; }"
             "QPushButton:hover { background-color: #555555; }"
         );
-        connect(diag_btn, &QPushButton::clicked, this, &FileTinderLauncher::open_diagnostics);
-        tools_row->addWidget(diag_btn);
+        connect(user_data_btn, &QPushButton::clicked, this, [this]() {
+            UserDataDialog dialog(db_manager_, this);
+            dialog.exec();
+        });
+        tools_row->addWidget(user_data_btn);
+        
+        auto* app_data_btn = new QPushButton("App Data");
+        app_data_btn->setStyleSheet(
+            "QPushButton { padding: 6px 12px; background-color: #4a4a4a; color: #cccccc; border: 1px solid #555555; }"
+            "QPushButton:hover { background-color: #555555; }"
+        );
+        app_data_btn->setToolTip("Open the folder where File Tinder stores its database and settings");
+        connect(app_data_btn, &QPushButton::clicked, this, [this]() {
+            QString data_path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+            if (data_path.isEmpty()) {
+                data_path = QDir::homePath() + "/.local/share/FileTinder";
+            }
+            QDir().mkpath(data_path);
+            QDesktopServices::openUrl(QUrl::fromLocalFile(data_path));
+        });
+        tools_row->addWidget(app_data_btn);
         
         root_layout->addLayout(tools_row);
         
         // Hotkey hint
-        auto* hint_text = new QLabel("Keys: Left=Delete | Down=Skip | Z=Undo | F=File List | Basic: Right=Keep | Advanced/AI: K=Keep, 1-0=Quick Access, Tab=Grid Nav");
+        auto* hint_text = new QLabel(
+            "Keys: Left=Delete | Down=Sort Later | Z=Undo | Y=Redo | F=File List | P=Preview | ?=Help | Enter=Review\n"
+            "Basic: Right=Keep | Advanced/AI: K=Keep, 1-0=Quick Access, Tab=Grid Nav"
+        );
         hint_text->setStyleSheet("color: #666666; font-size: 10px; padding-top: 8px;");
         hint_text->setAlignment(Qt::AlignCenter);
         hint_text->setWordWrap(true);
@@ -499,21 +528,77 @@ private:
     void pick_folder() {
         QString path = QFileDialog::getExistingDirectory(this, "Pick Folder", QDir::homePath());
         if (!path.isEmpty()) {
-            chosen_path_ = path;
-            path_indicator_->setText(path);
-            path_indicator_->setStyleSheet(
-                "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
-            );
+            if (multi_folder_check_ && multi_folder_check_->isChecked()) {
+                // In multi-folder mode, add as source; set as primary if first
+                if (!source_folders_.contains(path)) {
+                    if (source_folders_.isEmpty()) {
+                        chosen_path_ = path;
+                    }
+                    source_folders_.append(path);
+                    update_multi_folder_display();
+                }
+            } else {
+                chosen_path_ = path;
+                source_folders_ = {path};
+                path_indicator_->setText(path);
+                path_indicator_->setStyleSheet(
+                    "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+                );
+            }
             LOG_INFO("Launcher", QString("Folder selected: %1").arg(path));
         }
     }
     
-    bool show_pre_session_stats() {
-        QDir dir(chosen_path_);
-        QStringList files = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+    void update_multi_folder_display() {
+        bool multi = multi_folder_check_ && multi_folder_check_->isChecked();
+        bool show_list = multi && source_folders_.size() >= 2;
+        if (multi_folder_list_) multi_folder_list_->setVisible(show_list);
         
-        if (files.isEmpty()) {
-            QMessageBox::information(this, "Empty Folder", "This folder has no files to sort.");
+        if (multi_folder_list_ && show_list) {
+            multi_folder_list_->clear();
+            for (const QString& f : source_folders_) {
+                multi_folder_list_->addItem(f);
+            }
+        }
+        
+        // Update chosen_path_ to the first source folder
+        if (!source_folders_.isEmpty()) {
+            chosen_path_ = source_folders_.first();
+        }
+        
+        // Update path indicator
+        if (multi && source_folders_.size() > 1) {
+            path_indicator_->setText(QString("%1 folders selected").arg(source_folders_.size()));
+            path_indicator_->setStyleSheet(
+                "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+            );
+        } else if (!chosen_path_.isEmpty()) {
+            path_indicator_->setText(chosen_path_);
+            path_indicator_->setStyleSheet(
+                "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
+            );
+        }
+    }
+    
+    bool show_pre_session_stats() {
+        // Collect files from all source folders
+        QStringList all_files;
+        QStringList subfolders;
+        for (const QString& src : source_folders_) {
+            QDir dir(src);
+            if (!dir.exists()) continue;
+            QStringList entries = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+            for (const QString& f : entries) {
+                all_files.append(dir.absoluteFilePath(f));
+            }
+            QStringList sub = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString& s : sub) {
+                subfolders.append(s);
+            }
+        }
+        
+        if (all_files.isEmpty()) {
+            QMessageBox::information(this, "Empty Folder", "The selected folders have no files to sort.");
             return false;
         }
         
@@ -523,16 +608,15 @@ private:
         QMimeDatabase mime_db;
         
         QProgressDialog* progress = nullptr;
-        if (files.size() > 200) {
-            progress = new QProgressDialog("Analyzing files...", QString(), 0, files.size(), this);
+        if (all_files.size() > 200) {
+            progress = new QProgressDialog("Analyzing files...", QString(), 0, all_files.size(), this);
             progress->setWindowModality(Qt::WindowModal);
             progress->setMinimumDuration(0);
             progress->show();
         }
         
-        for (int i = 0; i < files.size(); ++i) {
-            const QString& file = files[i];
-            QFileInfo info(dir.absoluteFilePath(file));
+        for (int i = 0; i < all_files.size(); ++i) {
+            QFileInfo info(all_files[i]);
             total_size += info.size();
             QString mime = mime_db.mimeTypeForFile(info.absoluteFilePath()).name();
             if (mime.startsWith("image/")) img_count++;
@@ -549,8 +633,6 @@ private:
         }
         delete progress;
         
-        // Collect subfolder info
-        QStringList subfolders = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         int folder_count = subfolders.size();
         
         // Format size
@@ -563,26 +645,33 @@ private:
         // Show dashboard
         QDialog dashboard(this);
         dashboard.setWindowTitle("Session Overview");
-        dashboard.setMinimumSize(ui::scaling::scaled(450), ui::scaling::scaled(350));
+        dashboard.setMinimumSize(ui::scaling::scaled(380), ui::scaling::scaled(200));
         
         auto* layout = new QVBoxLayout(&dashboard);
+        layout->setContentsMargins(12, 8, 12, 8);
+        layout->setSpacing(4);
         
-        auto* header = new QLabel(chosen_path_);
+        QString header_text = source_folders_.size() > 1
+            ? QString("%1 source folders (primary: %2)").arg(source_folders_.size()).arg(chosen_path_)
+            : chosen_path_;
+        auto* header = new QLabel(header_text);
         header->setStyleSheet("font-size: 13px; font-weight: bold; color: #3498db;");
         header->setWordWrap(true);
         layout->addWidget(header);
         
         auto* summary = new QLabel(QString(
-            "<div style='font-size: 14px; margin: 10px 0;'>"
+            "<span style='font-size: 13px;'>"
             "<b>%1 files</b> &middot; %2 total &middot; <b>%3 subfolders</b>"
-            "</div>"
-        ).arg(files.size()).arg(size_str).arg(folder_count));
+            "</span>"
+        ).arg(all_files.size()).arg(size_str).arg(folder_count));
         layout->addWidget(summary);
         
         // Type breakdown
         auto* breakdown = new QWidget();
-        breakdown->setStyleSheet("background-color: #34495e; border-radius: 8px; padding: 12px;");
+        breakdown->setStyleSheet("background-color: #34495e; border-radius: 6px; padding: 8px;");
         auto* bd_layout = new QVBoxLayout(breakdown);
+        bd_layout->setContentsMargins(8, 6, 8, 6);
+        bd_layout->setSpacing(2);
         
         auto add_row = [&](const QString& label, int count, const QString& color) {
             if (count == 0) return;
@@ -604,8 +693,10 @@ private:
         // Folder section
         if (folder_count > 0) {
             auto* folder_widget = new QWidget();
-            folder_widget->setStyleSheet("background-color: #2c3e50; border-radius: 8px; padding: 10px;");
+            folder_widget->setStyleSheet("background-color: #2c3e50; border-radius: 6px; padding: 6px;");
             auto* folder_layout = new QVBoxLayout(folder_widget);
+            folder_layout->setContentsMargins(8, 4, 8, 4);
+            folder_layout->setSpacing(2);
             
             auto* folder_header = new QLabel(QString(
                 "<span style='color: #ecf0f1; font-size: 13px; font-weight: bold;'>Subfolders (%1)</span>"
@@ -657,18 +748,105 @@ private:
             return false;
         }
         
-        QDir folder(chosen_path_);
-        if (folder.entryList(QDir::Files).isEmpty()) {
-            QMessageBox::information(this, "Empty Folder", "This folder has no files to sort.");
+        // Ensure source_folders_ has at least the primary folder
+        if (source_folders_.isEmpty()) {
+            source_folders_ = {chosen_path_};
+        }
+        
+        // Check that at least one folder has files
+        bool has_files = false;
+        for (const QString& src : source_folders_) {
+            QDir folder(src);
+            if (!folder.entryList(QDir::Files).isEmpty()) {
+                has_files = true;
+                break;
+            }
+        }
+        if (!has_files) {
+            QMessageBox::information(this, "Empty Folder", "The selected folders have no files to sort.");
             return false;
         }
+        
+        // Persist source folders for session resume
+        db_manager_.save_source_folders(chosen_path_, source_folders_);
         
         return true;
     }
     
+    void destroy_all_mode_widgets() {
+        if (basic_widget_) {
+            stack_->removeWidget(basic_widget_);
+            basic_widget_->deleteLater();
+            basic_widget_ = nullptr;
+        }
+        if (advanced_widget_) {
+            stack_->removeWidget(advanced_widget_);
+            advanced_widget_->deleteLater();
+            advanced_widget_ = nullptr;
+        }
+        if (ai_widget_) {
+            stack_->removeWidget(ai_widget_);
+            ai_widget_->deleteLater();
+            ai_widget_ = nullptr;
+        }
+        // Destroy shared folder model when all modes are destroyed
+        if (shared_folder_model_) {
+            shared_folder_model_->deleteLater();
+            shared_folder_model_ = nullptr;
+        }
+    }
+    
+    // Get or create the shared FolderTreeModel for the current folder
+    FolderTreeModel* get_shared_folder_model() {
+        if (!shared_folder_model_ || shared_folder_model_->property("source_folder").toString() != chosen_path_) {
+            if (shared_folder_model_) {
+                shared_folder_model_->deleteLater();
+            }
+            shared_folder_model_ = new FolderTreeModel(this);
+            shared_folder_model_->set_root_folder(chosen_path_);
+            shared_folder_model_->setProperty("source_folder", chosen_path_);
+            // Load saved folder tree from DB
+            shared_folder_model_->blockSignals(true);
+            shared_folder_model_->load_from_database(db_manager_, chosen_path_);
+            shared_folder_model_->blockSignals(false);
+        }
+        return shared_folder_model_;
+    }
+    
+    void return_to_launcher() {
+        stack_->setCurrentWidget(launcher_page_);
+        setWindowTitle("File Tinder");
+        check_session_state();
+        // Restore the launcher page size so the window doesn't stay enlarged
+        if (launcher_size_.isValid()) {
+            resize(launcher_size_);
+        }
+        ensure_on_screen();
+    }
+    
+    void check_session_state() {
+        if (chosen_path_.isEmpty() || !resume_label_) return;
+        int progress = db_manager_.get_session_progress_count(chosen_path_);
+        if (progress > 0) {
+            resume_label_->setText(QString("Session in progress: %1 files sorted. Click a mode to resume.")
+                .arg(progress));
+            resume_label_->setVisible(true);
+        } else {
+            resume_label_->setVisible(false);
+        }
+    }
+    
     void launch_basic() {
+        // Fast path: widget already exists and folder hasn't changed
+        if (basic_widget_ && basic_widget_->source_folder() == chosen_path_) {
+            if (stack_->currentWidget() == launcher_page_)
+                launcher_size_ = size();
+            stack_->setCurrentWidget(basic_widget_);
+            resize_for_mode("basic");
+            return;
+        }
+        
         if (!validate_folder()) return;
-        // Skip stats dashboard on mode switch (already shown once)
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;
         } else {
@@ -677,29 +855,49 @@ private:
         
         LOG_INFO("Launcher", "Starting basic mode");
         
-        auto* dlg = new StandaloneFileTinderDialog(chosen_path_, db_manager_, this);
+        // Save launcher size only when leaving the launcher page
+        if (stack_->currentWidget() == launcher_page_)
+            launcher_size_ = size();
         
-        connect(dlg, &StandaloneFileTinderDialog::switch_to_advanced_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            // Defer mode switch to break recursive exec() chain
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_advanced);
-        });
+        // Destroy old widget if source folder changed
+        if (basic_widget_ && basic_widget_->source_folder() != chosen_path_) {
+            stack_->removeWidget(basic_widget_);
+            basic_widget_->deleteLater();
+            basic_widget_ = nullptr;
+        }
         
-        connect(dlg, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_ai);
-        });
+        if (!basic_widget_) {
+            basic_widget_ = new StandaloneFileTinderDialog(chosen_path_, db_manager_, this, source_folders_);
+            connect(basic_widget_, &StandaloneFileTinderDialog::switch_to_advanced_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_advanced();
+            });
+            connect(basic_widget_, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_ai();
+            });
+            connect(basic_widget_, &StandaloneFileTinderDialog::request_back, this, [this]() {
+                return_to_launcher();
+            });
+            stack_->addWidget(basic_widget_);
+            basic_widget_->initialize();
+        }
         
-        dlg->initialize();
-        dlg->exec();
-        dlg->deleteLater();
+        stack_->setCurrentWidget(basic_widget_);
+        resize_for_mode("basic");
     }
     
     void launch_advanced() {
+        // Fast path: widget already exists and folder hasn't changed
+        if (advanced_widget_ && advanced_widget_->source_folder() == chosen_path_) {
+            if (stack_->currentWidget() == launcher_page_)
+                launcher_size_ = size();
+            stack_->setCurrentWidget(advanced_widget_);
+            resize_for_mode("advanced");
+            return;
+        }
+        
         if (!validate_folder()) return;
-        // Skip stats dashboard on mode switch (already shown once)
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;
         } else {
@@ -708,27 +906,47 @@ private:
         
         LOG_INFO("Launcher", "Starting advanced mode");
         
-        auto* dlg = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this);
+        // Save launcher size before resizing for mode
+        if (stack_->currentWidget() == launcher_page_)
+            launcher_size_ = size();
         
-        connect(dlg, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            // Defer mode switch to break recursive exec() chain
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_basic);
-        });
+        if (advanced_widget_ && advanced_widget_->source_folder() != chosen_path_) {
+            stack_->removeWidget(advanced_widget_);
+            advanced_widget_->deleteLater();
+            advanced_widget_ = nullptr;
+        }
         
-        connect(dlg, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_ai);
-        });
+        if (!advanced_widget_) {
+            advanced_widget_ = new AdvancedFileTinderDialog(chosen_path_, db_manager_, this, source_folders_, get_shared_folder_model());
+            connect(advanced_widget_, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_basic();
+            });
+            connect(advanced_widget_, &StandaloneFileTinderDialog::switch_to_ai_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_ai();
+            });
+            connect(advanced_widget_, &StandaloneFileTinderDialog::request_back, this, [this]() {
+                return_to_launcher();
+            });
+            stack_->addWidget(advanced_widget_);
+            advanced_widget_->initialize();
+        }
         
-        dlg->initialize();
-        dlg->exec();
-        dlg->deleteLater();
+        stack_->setCurrentWidget(advanced_widget_);
+        resize_for_mode("advanced");
     }
     
     void launch_ai() {
+        // Fast path: widget already exists and folder hasn't changed
+        if (ai_widget_ && ai_widget_->source_folder() == chosen_path_) {
+            if (stack_->currentWidget() == launcher_page_)
+                launcher_size_ = size();
+            stack_->setCurrentWidget(ai_widget_);
+            resize_for_mode("ai");
+            return;
+        }
+        
         if (!validate_folder()) return;
         if (skip_stats_on_next_launch_) {
             skip_stats_on_next_launch_ = false;
@@ -738,239 +956,35 @@ private:
         
         LOG_INFO("Launcher", "Starting AI mode");
         
-        auto* dlg = new AiFileTinderDialog(chosen_path_, db_manager_, this);
+        // Save launcher size before resizing for mode
+        if (stack_->currentWidget() == launcher_page_)
+            launcher_size_ = size();
         
-        connect(dlg, &AiFileTinderDialog::switch_to_basic_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_basic);
-        });
+        if (ai_widget_ && ai_widget_->source_folder() != chosen_path_) {
+            stack_->removeWidget(ai_widget_);
+            ai_widget_->deleteLater();
+            ai_widget_ = nullptr;
+        }
         
-        connect(dlg, &AiFileTinderDialog::switch_to_advanced_mode, this, [this, dlg]() {
-            dlg->done(QDialog::Accepted);
-            skip_stats_on_next_launch_ = true;
-            QTimer::singleShot(0, this, &FileTinderLauncher::launch_advanced);
-        });
+        if (!ai_widget_) {
+            ai_widget_ = new AiFileTinderDialog(chosen_path_, db_manager_, this, source_folders_, get_shared_folder_model());
+            connect(ai_widget_, &AdvancedFileTinderDialog::switch_to_basic_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_basic();
+            });
+            connect(ai_widget_, &StandaloneFileTinderDialog::switch_to_advanced_mode, this, [this]() {
+                skip_stats_on_next_launch_ = true;
+                launch_advanced();
+            });
+            connect(ai_widget_, &StandaloneFileTinderDialog::request_back, this, [this]() {
+                return_to_launcher();
+            });
+            stack_->addWidget(ai_widget_);
+            ai_widget_->initialize();
+        }
         
-        dlg->initialize();
-        dlg->exec();
-        dlg->deleteLater();
-    }
-
-    bool launch_module(AppModule module) {
-        if (!is_module_available(module)) {
-            QMessageBox::warning(this, "Module Missing",
-                QString("%1 is not available in this installation.").arg(module_display_name(module)));
-            return false;
-        }
-
-        switch (module) {
-        case AppModule::Tinder:
-            launch_basic();
-            return true;
-        case AppModule::Filer:
-            launch_advanced();
-            return true;
-        case AppModule::AiFiler:
-            launch_ai();
-            return true;
-        }
-        return false;
-    }
-
-    bool launch_standalone_module(AppModule module) {
-        if (!standalone_module_paths_.contains(module)) return false;
-
-        QStringList args;
-        args << QString("--module=%1").arg(module_id(module));
-        if (!chosen_path_.isEmpty()) {
-            args << QString("--folder=%1").arg(chosen_path_);
-        }
-
-        const bool started = QProcess::startDetached(standalone_module_paths_[module], args);
-        if (!started) {
-            QMessageBox::warning(this, "Launch Failed",
-                QString("Could not launch standalone app for %1.").arg(module_display_name(module)));
-        }
-        return started;
-    }
-
-    void open_module_manager() {
-        refresh_module_discovery();
-
-        QDialog manager(this);
-        manager.setWindowTitle("Module Manager");
-        manager.setMinimumSize(ui::scaling::scaled(520), ui::scaling::scaled(300));
-
-        auto* layout = new QVBoxLayout(&manager);
-        layout->addWidget(new QLabel("Installed modules and companion standalone apps:"));
-
-        auto* table = new QTableWidget();
-        table->setColumnCount(3);
-        table->setHorizontalHeaderLabels({"Module", "Status", "Standalone Path"});
-        table->horizontalHeader()->setStretchLastSection(true);
-        table->setSelectionMode(QAbstractItemView::NoSelection);
-        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
-        const auto modules = module_catalog();
-        table->setRowCount(static_cast<int>(modules.size()));
-        for (int row = 0; row < static_cast<int>(modules.size()); ++row) {
-            const auto& descriptor = modules[row];
-            table->setItem(row, 0, new QTableWidgetItem(descriptor.app_name));
-            table->setItem(row, 1, new QTableWidgetItem(module_install_status(descriptor.module)));
-            table->setItem(row, 2, new QTableWidgetItem(
-                standalone_module_paths_.value(descriptor.module, "(none detected)")));
-        }
-        table->resizeColumnsToContents();
-        layout->addWidget(table, 1);
-
-        auto* note = new QLabel(
-            "Missing modules can be installed from release packages and are auto-detected "
-            "when found in PATH or beside this executable.");
-        note->setWordWrap(true);
-        note->setStyleSheet("color: #9fb7cf; font-size: 10px;");
-        layout->addWidget(note);
-
-        auto* btn_row = new QHBoxLayout();
-        auto* refresh_btn = new QPushButton("Rescan");
-        connect(refresh_btn, &QPushButton::clicked, this, [this, table]() {
-            refresh_module_discovery();
-            const auto modules = module_catalog();
-            for (int row = 0; row < static_cast<int>(modules.size()); ++row) {
-                const auto& descriptor = modules[row];
-                table->item(row, 1)->setText(module_install_status(descriptor.module));
-                table->item(row, 2)->setText(
-                    standalone_module_paths_.value(descriptor.module, "(none detected)"));
-            }
-        });
-        btn_row->addWidget(refresh_btn);
-
-        auto* download_btn = new QPushButton("Download Modules");
-        connect(download_btn, &QPushButton::clicked, &manager, [this]() {
-            if (!QDesktopServices::openUrl(suite_releases_url)) {
-                QMessageBox::warning(this, "Open URL Failed",
-                    QString("Could not open release URL:\n%1").arg(suite_releases_url.toString()));
-                return;
-            }
-            QStringList module_names;
-            for (const auto& descriptor : module_catalog()) {
-                module_names << descriptor.app_name;
-            }
-            QMessageBox::information(this, "Download",
-                QString("Release page opened. Download any module package you need (%1), ")
-                    .arg(module_names.join(", ")) +
-                "then relaunch or click Rescan.");
-        });
-        btn_row->addWidget(download_btn);
-
-        btn_row->addStretch();
-        auto* close_btn = new QPushButton("Close");
-        connect(close_btn, &QPushButton::clicked, &manager, &QDialog::accept);
-        btn_row->addWidget(close_btn);
-        layout->addLayout(btn_row);
-
-        manager.exec();
-    }
-
-    void launch_suite_selector() {
-        refresh_module_discovery();
-
-        QDialog selector(this);
-        selector.setWindowTitle("Launch Module Suite");
-        selector.setMinimumSize(ui::scaling::scaled(430), ui::scaling::scaled(260));
-
-        auto* layout = new QVBoxLayout(&selector);
-        auto* help = new QLabel("Choose which modules to open for this session:");
-        help->setWordWrap(true);
-        layout->addWidget(help);
-
-        QMap<AppModule, QCheckBox*> checkboxes;
-        for (const auto& descriptor : module_catalog()) {
-            auto* checkbox = new QCheckBox(
-                QString("%1 — %2").arg(descriptor.app_name, descriptor.description));
-            checkbox->setChecked(is_module_available(descriptor.module));
-            checkbox->setEnabled(is_module_available(descriptor.module));
-            if (!is_module_available(descriptor.module)) {
-                checkbox->setToolTip("Not installed");
-            }
-            layout->addWidget(checkbox);
-            checkboxes[descriptor.module] = checkbox;
-        }
-
-        auto* standalone_opt = new QCheckBox(
-            "Open standalone companions when available (instead of integrated dialogs)");
-        standalone_opt->setChecked(false);
-        layout->addWidget(standalone_opt);
-
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-        connect(buttons, &QDialogButtonBox::accepted, &selector, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &selector, &QDialog::reject);
-        layout->addWidget(buttons);
-
-        if (selector.exec() != QDialog::Accepted) return;
-
-        std::vector<AppModule> selected;
-        for (const auto& descriptor : module_catalog()) {
-            auto* checkbox = checkboxes.value(descriptor.module, nullptr);
-            if (checkbox && checkbox->isChecked()) selected.push_back(descriptor.module);
-        }
-
-        if (selected.empty()) {
-            QMessageBox::information(this, "No Modules Selected", "Select at least one module.");
-            return;
-        }
-
-        bool first = true;
-        const bool use_standalone = standalone_opt->isChecked();
-        for (AppModule module : selected) {
-            if (!first) skip_stats_on_next_launch_ = true;
-            if (use_standalone && launch_standalone_module(module)) {
-                // launched detached companion
-            } else {
-                launch_module(module);
-            }
-            first = false;
-        }
-    }
-
-    void handle_initial_module_request() {
-        if (!requested_module_ && !request_suite_launch_) return;
-
-        refresh_module_discovery();
-        if (request_suite_launch_) {
-            launch_suite_selector();
-            return;
-        }
-
-        if (!requested_module_) return;
-        const AppModule module = *requested_module_;
-        if (!is_module_available(module)) return;
-
-        if (available_module_count() > 1) {
-            QMessageBox prompt(this);
-            prompt.setIcon(QMessageBox::Question);
-            prompt.setWindowTitle("Open Module or Suite");
-            prompt.setText(QString("%1 was opened as a standalone module.")
-                .arg(module_display_name(module)));
-            prompt.setInformativeText("Do you want to attach to a multi-module suite session?");
-            auto* module_btn = prompt.addButton("Module Only", QMessageBox::AcceptRole);
-            auto* suite_btn = prompt.addButton("Open Suite Selector", QMessageBox::ActionRole);
-            prompt.addButton(QMessageBox::Cancel);
-            prompt.exec();
-            if (prompt.clickedButton() == suite_btn) {
-                launch_suite_selector();
-                return;
-            }
-            if (prompt.clickedButton() != module_btn) return;
-        }
-
-        launch_module(module);
-    }
-    
-    void open_diagnostics() {
-        LOG_INFO("Launcher", "Opening diagnostic tool");
-        DiagnosticTool diag(db_manager_, this);
-        diag.exec();
+        stack_->setCurrentWidget(ai_widget_);
+        resize_for_mode("ai");
     }
     
     void clear_session() {
@@ -985,6 +999,8 @@ private:
         
         if (reply == QMessageBox::Yes) {
             db_manager_.clear_session(chosen_path_);
+            destroy_all_mode_widgets();
+            if (resume_label_) resume_label_->setVisible(false);
             LOG_INFO("Launcher", QString("Session cleared for: %1").arg(chosen_path_));
             QMessageBox::information(this, "Session Cleared", "Saved progress has been cleared.");
         }
@@ -1005,7 +1021,7 @@ private:
         
         QDialog dialog(this);
         dialog.setWindowTitle("Undo History");
-        dialog.setMinimumSize(600, 400);
+        dialog.resize(ui::scaling::scaled(600), ui::scaling::scaled(400));
         
         auto* layout = new QVBoxLayout(&dialog);
         
@@ -1014,11 +1030,20 @@ private:
         info_label->setWordWrap(true);
         layout->addWidget(info_label);
         
+        auto* filter_layout = new QHBoxLayout();
+        filter_layout->addWidget(new QLabel("Filter:"));
+        auto* history_filter = new QComboBox();
+        history_filter->addItems({"All", "Moved", "Deleted"});
+        filter_layout->addWidget(history_filter);
+        filter_layout->addStretch();
+        layout->addLayout(filter_layout);
+        
         auto* table = new QTableWidget();
         table->setColumnCount(5);
         table->setHorizontalHeaderLabels({"Action", "File", "Destination", "Time", "Undo"});
         table->horizontalHeader()->setStretchLastSection(true);
         table->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table->setSortingEnabled(true);
         table->setRowCount(static_cast<int>(log_entries.size()));
         
         for (int i = 0; i < static_cast<int>(log_entries.size()); ++i) {
@@ -1028,7 +1053,7 @@ private:
             action_item->setFlags(action_item->flags() & ~Qt::ItemIsEditable);
             table->setItem(i, 0, action_item);
             
-            auto* file_item = new QTableWidgetItem(QFileInfo(src).fileName());
+            auto* file_item = new QTableWidgetItem(src);
             file_item->setFlags(file_item->flags() & ~Qt::ItemIsEditable);
             file_item->setToolTip(src);
             table->setItem(i, 1, file_item);
@@ -1083,6 +1108,23 @@ private:
         
         table->resizeColumnsToContents();
         layout->addWidget(table, 1);
+        
+        connect(history_filter, &QComboBox::currentTextChanged, this, [table](const QString& filter) {
+            for (int r = 0; r < table->rowCount(); ++r) {
+                if (filter == "All") {
+                    table->setRowHidden(r, false);
+                } else {
+                    auto* item = table->item(r, 0);
+                    if (!item) continue;
+                    QString action = item->text().toLower();
+                    if (filter == "Moved") {
+                        table->setRowHidden(r, !action.startsWith("move"));
+                    } else if (filter == "Deleted") {
+                        table->setRowHidden(r, !action.startsWith("delete"));
+                    }
+                }
+            }
+        });
         
         auto* btn_layout = new QHBoxLayout();
         btn_layout->addStretch();
@@ -1139,27 +1181,8 @@ int main(int argc, char* argv[]) {
     app_colors.setColor(QPalette::Highlight, QColor(0, 120, 212));
     app_colors.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
     qt_app.setPalette(app_colors);
-
-    QString initial_folder;
-    std::optional<AppModule> requested_module = std::nullopt;
-    bool request_suite = false;
-
-    const QStringList args = QCoreApplication::arguments();
-    for (const QString& arg : args) {
-        if (arg == "--suite") {
-            request_suite = true;
-            continue;
-        }
-        if (arg.startsWith("--folder=")) {
-            initial_folder = arg.mid(QString("--folder=").size());
-            continue;
-        }
-        if (arg.startsWith("--module=")) {
-            requested_module = module_from_argument_token(arg.mid(QString("--module=").size()));
-        }
-    }
-
-    FileTinderLauncher launcher_window(initial_folder, requested_module, request_suite);
+    
+    FileTinderLauncher launcher_window;
     launcher_window.show();
     
     int exit_code = qt_app.exec();
