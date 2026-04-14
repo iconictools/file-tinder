@@ -44,20 +44,26 @@ enum class AppVariant {
     IconicAiFiler
 };
 
-static QString compiled_app_variant() {
+static const QString& compiled_app_variant() {
+    static const QString variant = []() {
 #ifdef FILE_TINDER_APP_VARIANT
-    return QStringLiteral(FILE_TINDER_APP_VARIANT).trimmed().toLower();
+        return QStringLiteral(FILE_TINDER_APP_VARIANT).trimmed().toLower();
 #else
-    return QStringLiteral("suite");
+        return QStringLiteral("suite");
 #endif
+    }();
+    return variant;
 }
 
 static AppVariant current_app_variant() {
-    const QString variant = compiled_app_variant();
-    if (variant == "iconic-file-tinder") return AppVariant::IconicFileTinder;
-    if (variant == "iconic-file-filer") return AppVariant::IconicFileFiler;
-    if (variant == "iconic-ai-filer") return AppVariant::IconicAiFiler;
-    return AppVariant::Suite;
+    static const AppVariant variant = []() {
+        const QString compiled_variant = compiled_app_variant();
+        if (compiled_variant == "iconic-file-tinder") return AppVariant::IconicFileTinder;
+        if (compiled_variant == "iconic-file-filer") return AppVariant::IconicFileFiler;
+        if (compiled_variant == "iconic-ai-filer") return AppVariant::IconicAiFiler;
+        return AppVariant::Suite;
+    }();
+    return variant;
 }
 
 static bool supports_basic_mode() {
@@ -260,13 +266,15 @@ private:
     }
 
     void launch_default_variant_mode_if_needed() {
-        if (current_app_variant() == AppVariant::Suite) return;
+        const AppVariant variant = current_app_variant();
+        if (variant == AppVariant::Suite) return;
         QTimer::singleShot(0, this, [this]() {
-            if (current_app_variant() == AppVariant::IconicFileTinder) {
+            const AppVariant current_variant = current_app_variant();
+            if (current_variant == AppVariant::IconicFileTinder) {
                 launch_basic();
-            } else if (current_app_variant() == AppVariant::IconicFileFiler) {
+            } else if (current_variant == AppVariant::IconicFileFiler) {
                 launch_advanced();
-            } else if (current_app_variant() == AppVariant::IconicAiFiler) {
+            } else if (current_variant == AppVariant::IconicAiFiler) {
                 launch_ai();
             }
         });
@@ -511,7 +519,7 @@ private:
         auto* modes_row = new QHBoxLayout();
         modes_row->setSpacing(12);
         
-        basic_mode_btn_ = new QPushButton("Iconic File Tinder\n(Keep / Delete / Sort Later)");
+        basic_mode_btn_ = new QPushButton("ICONIC FILE TINDER\n(Keep / Delete / Sort Later)");
         basic_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         basic_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #107c10; color: white; border: none; font-size: 13px; }"
@@ -520,7 +528,7 @@ private:
         connect(basic_mode_btn_, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
         modes_row->addWidget(basic_mode_btn_);
         
-        advanced_mode_btn_ = new QPushButton("Iconic File Filer\n(Folder grid + assignment)");
+        advanced_mode_btn_ = new QPushButton("ICONIC FILE FILER\n(Folder grid + assignment)");
         advanced_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         advanced_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #5c2d91; color: white; border: none; font-size: 13px; }"
@@ -529,7 +537,7 @@ private:
         connect(advanced_mode_btn_, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
         modes_row->addWidget(advanced_mode_btn_);
         
-        ai_mode_btn_ = new QPushButton("Iconic AI Filer\n(Auto-sort with AI suggestions)");
+        ai_mode_btn_ = new QPushButton("ICONIC AI FILER\n(Auto-sort with AI suggestions)");
         ai_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         ai_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #2980b9; color: white; border: none; font-size: 13px; }"
