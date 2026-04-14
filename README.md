@@ -169,6 +169,20 @@ cmake -G "Visual Studio 17 2022" -A x64 ..
 cmake --build . --config Release
 ```
 
+| Option | Default | Description |
+|--------|---------|-------------|
+| `CMAKE_BUILD_TYPE` | Release | Build type (Debug/Release) |
+| `Qt6_DIR` | Auto-detected | Path to Qt6 CMake config |
+
+## Usage
+
+## Pristine Quality Checklist
+
+Use the full release checklist here:
+
+- [PRISTINE_QA_CHECKLIST.md](PRISTINE_QA_CHECKLIST.md)
+  - Includes feature-by-feature checks plus AI and non-AI compatibility matrixes.
+
 ## Keyboard Shortcuts
 
 ### All Modes
