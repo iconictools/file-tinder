@@ -268,13 +268,12 @@ private:
     void launch_default_variant_mode_if_needed() {
         const AppVariant variant = current_app_variant();
         if (variant == AppVariant::Suite) return;
-        QTimer::singleShot(0, this, [this]() {
-            const AppVariant current_variant = current_app_variant();
-            if (current_variant == AppVariant::IconicFileTinder) {
+        QTimer::singleShot(0, this, [this, variant]() {
+            if (variant == AppVariant::IconicFileTinder) {
                 launch_basic();
-            } else if (current_variant == AppVariant::IconicFileFiler) {
+            } else if (variant == AppVariant::IconicFileFiler) {
                 launch_advanced();
-            } else if (current_variant == AppVariant::IconicAiFiler) {
+            } else if (variant == AppVariant::IconicAiFiler) {
                 launch_ai();
             }
         });
@@ -519,7 +518,7 @@ private:
         auto* modes_row = new QHBoxLayout();
         modes_row->setSpacing(12);
         
-        basic_mode_btn_ = new QPushButton("ICONIC FILE TINDER\n(Keep / Delete / Sort Later)");
+        basic_mode_btn_ = new QPushButton("Basic Mode\n(Iconic File Tinder)");
         basic_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         basic_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #107c10; color: white; border: none; font-size: 13px; }"
@@ -528,7 +527,7 @@ private:
         connect(basic_mode_btn_, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
         modes_row->addWidget(basic_mode_btn_);
         
-        advanced_mode_btn_ = new QPushButton("ICONIC FILE FILER\n(Folder grid + assignment)");
+        advanced_mode_btn_ = new QPushButton("Advanced Mode\n(Iconic File Filer)");
         advanced_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         advanced_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #5c2d91; color: white; border: none; font-size: 13px; }"
@@ -537,7 +536,7 @@ private:
         connect(advanced_mode_btn_, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
         modes_row->addWidget(advanced_mode_btn_);
         
-        ai_mode_btn_ = new QPushButton("ICONIC AI FILER\n(Auto-sort with AI suggestions)");
+        ai_mode_btn_ = new QPushButton("AI Mode\n(Iconic AI Filer)");
         ai_mode_btn_->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         ai_mode_btn_->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #2980b9; color: white; border: none; font-size: 13px; }"
