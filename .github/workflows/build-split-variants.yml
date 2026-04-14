@@ -26,6 +26,7 @@ jobs:
         if: runner.os != 'Windows'
         uses: jurplel/install-qt-action@v4
         with:
+          # Keep aligned with existing repo workflows and current supported Qt 6.x baseline.
           version: "6.6.*"
           tools: "tools_cmake"
 
@@ -33,6 +34,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: jurplel/install-qt-action@v4
         with:
+          # Keep aligned with existing repo workflows and current supported Qt 6.x baseline.
           version: "6.6.*"
           arch: "win64_msvc2019_64"
 

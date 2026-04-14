@@ -93,6 +93,8 @@ static QString app_subtitle_text() {
     }
 }
 
+static const char* kVariantUnavailableTooltip = "Not available in this app variant";
+
 class FileTinderLauncher : public QWidget {
     Q_OBJECT
     
@@ -245,15 +247,15 @@ private:
     void apply_variant_mode_visibility() {
         if (basic_mode_btn_) {
             basic_mode_btn_->setEnabled(supports_basic_mode());
-            if (!supports_basic_mode()) basic_mode_btn_->setToolTip("Not available in this app variant");
+            if (!supports_basic_mode()) basic_mode_btn_->setToolTip(kVariantUnavailableTooltip);
         }
         if (advanced_mode_btn_) {
             advanced_mode_btn_->setEnabled(supports_advanced_mode());
-            if (!supports_advanced_mode()) advanced_mode_btn_->setToolTip("Not available in this app variant");
+            if (!supports_advanced_mode()) advanced_mode_btn_->setToolTip(kVariantUnavailableTooltip);
         }
         if (ai_mode_btn_) {
             ai_mode_btn_->setEnabled(supports_ai_mode());
-            if (!supports_ai_mode()) ai_mode_btn_->setToolTip("Not available in this app variant");
+            if (!supports_ai_mode()) ai_mode_btn_->setToolTip(kVariantUnavailableTooltip);
         }
     }
 
