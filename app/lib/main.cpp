@@ -21,6 +21,17 @@
 #include <QTimer>
 #include <QMimeDatabase>
 #include <QProgressDialog>
+#include <QMap>
+#include <QCheckBox>
+#include <QDialogButtonBox>
+#include <QGroupBox>
+#include <QProcess>
+#include <QCoreApplication>
+#include <QStandardPaths>
+#include <QUrl>
+#include <QDesktopServices>
+#include <QFile>
+#include <optional>
 
 #include "DatabaseManager.hpp"
 #include "StandaloneFileTinderDialog.hpp"
@@ -31,14 +42,34 @@
 #include "DiagnosticTool.hpp"
 #include "ui_constants.hpp"
 
+enum class AppModule {
+    Tinder,
+    Filer,
+    AiFiler
+};
+
+struct ModuleDescriptor {
+    AppModule module;
+    QString id;
+    QString app_name;
+    QString button_title;
+    QString description;
+    QStringList standalone_executables;
+};
+
 class FileTinderLauncher : public QDialog {
     Q_OBJECT
     
 public:
-    FileTinderLauncher(QWidget* parent_widget = nullptr) 
+    FileTinderLauncher(const QString& initial_folder = QString(),
+                      std::optional<AppModule> requested_module = std::nullopt,
+                      bool request_suite = false,
+                      QWidget* parent_widget = nullptr)
         : QDialog(parent_widget)
         , db_manager_()
-        , chosen_path_() {
+        , chosen_path_()
+        , requested_module_(requested_module)
+        , request_suite_launch_(request_suite) {
         
         setWindowTitle("File Tinder Launcher");
         setMinimumSize(ui::scaling::scaled(550), ui::scaling::scaled(450));
@@ -56,6 +87,7 @@ public:
             }
         }
         
+        refresh_module_discovery();
         build_interface();
         
         // Load theme preference
@@ -63,24 +95,29 @@ public:
         is_dark_theme_ = theme_settings.value("darkTheme", true).toBool();
         apply_theme();
         
-        // Pre-fill last used folder if it still exists
+        // Pre-fill folder
         QSettings settings("FileTinder", "FileTinder");
-        QString last_folder = settings.value("lastFolder").toString();
-        if (!last_folder.isEmpty() && QDir(last_folder).exists()) {
-            chosen_path_ = last_folder;
-            path_indicator_->setText(last_folder);
+        QString prefilled_folder = initial_folder;
+        if (prefilled_folder.isEmpty()) {
+            prefilled_folder = settings.value("lastFolder").toString();
+        }
+        if (!prefilled_folder.isEmpty() && QDir(prefilled_folder).exists()) {
+            chosen_path_ = prefilled_folder;
+            path_indicator_->setText(prefilled_folder);
             path_indicator_->setStyleSheet(
                 "padding: 8px 12px; background-color: #1a3a1a; border: 1px solid #2a5a2a; color: #88cc88;"
             );
             
             // Check for resumable session
-            int progress = db_manager_.get_session_progress_count(last_folder);
+            int progress = db_manager_.get_session_progress_count(prefilled_folder);
             if (progress > 0 && resume_label_) {
                 resume_label_->setText(QString("Session in progress: %1 files sorted. Click a mode to resume.")
                     .arg(progress));
                 resume_label_->setVisible(true);
             }
         }
+
+        QTimer::singleShot(0, this, [this]() { handle_initial_module_request(); });
     }
     
 private:
@@ -89,8 +126,96 @@ private:
     QLabel* path_indicator_;
     QListWidget* recent_list_ = nullptr;
     QLabel* resume_label_ = nullptr;
+    QLabel* modules_status_label_ = nullptr;
     bool skip_stats_on_next_launch_ = false;  // Skip stats dashboard on mode switch
     bool is_dark_theme_ = true;
+    std::optional<AppModule> requested_module_;
+    bool request_suite_launch_ = false;
+    QMap<AppModule, QString> standalone_module_paths_;
+
+    std::vector<ModuleDescriptor> module_catalog() const {
+        return {
+            {AppModule::Tinder, "tinder", "Iconic File Tinder",
+             "File Tinder\n(Swipe sorting)", "Core swipe-style file triage",
+             {"IconicFileTinder", "FileTinder", "iconic-file-tinder"}},
+            {AppModule::Filer, "filer", "Iconic File Filer",
+             "File Filer\n(Folder tree)", "Folder-mind-map filing workflow",
+             {"IconicFileFiler", "FileFiler", "iconic-file-filer"}},
+            {AppModule::AiFiler, "ai-filer", "Iconic File AI Filer",
+             "File AI Filer\n(AI-assisted)", "AI-assisted filing and category suggestions",
+             {"IconicFileAiFiler", "FileAiFiler", "iconic-file-ai-filer"}}
+        };
+    }
+
+    QString module_display_name(AppModule module) const {
+        for (const auto& descriptor : module_catalog()) {
+            if (descriptor.module == module) return descriptor.app_name;
+        }
+        return "Unknown Module";
+    }
+
+    QString module_id(AppModule module) const {
+        for (const auto& descriptor : module_catalog()) {
+            if (descriptor.module == module) return descriptor.id;
+        }
+        return "unknown";
+    }
+
+    bool is_integrated_module_available(AppModule) const {
+        return true;  // current build ships all modules in a single binary
+    }
+
+    bool is_module_available(AppModule module) const {
+        return is_integrated_module_available(module) || standalone_module_paths_.contains(module);
+    }
+
+    int available_module_count() const {
+        int available = 0;
+        for (const auto& descriptor : module_catalog()) {
+            if (is_module_available(descriptor.module)) available++;
+        }
+        return available;
+    }
+
+    void refresh_module_discovery() {
+        standalone_module_paths_.clear();
+        const QString app_dir = QCoreApplication::applicationDirPath();
+
+        for (const auto& descriptor : module_catalog()) {
+            for (const QString& executable : descriptor.standalone_executables) {
+                const QString local_path = QDir(app_dir).absoluteFilePath(executable);
+                if (QFile::exists(local_path)) {
+                    standalone_module_paths_[descriptor.module] = local_path;
+                    break;
+                }
+                const QString in_path = QStandardPaths::findExecutable(executable);
+                if (!in_path.isEmpty()) {
+                    standalone_module_paths_[descriptor.module] = in_path;
+                    break;
+                }
+            }
+        }
+        update_modules_status_label();
+    }
+
+    QString module_install_status(AppModule module) const {
+        if (standalone_module_paths_.contains(module)) {
+            return "Integrated + Standalone detected";
+        }
+        if (is_integrated_module_available(module)) {
+            return "Integrated";
+        }
+        return "Missing";
+    }
+
+    void update_modules_status_label() {
+        if (!modules_status_label_) return;
+        int standalone_count = standalone_module_paths_.size();
+        modules_status_label_->setText(
+            QString("Module suite ready: 3 integrated modules • %1 standalone companion(s) detected")
+                .arg(standalone_count)
+        );
+    }
     
     void apply_theme() {
         QPalette p;
@@ -141,12 +266,12 @@ private:
         root_layout->setSpacing(18);
         
         // App header
-        auto* app_title = new QLabel("FILE TINDER");
+        auto* app_title = new QLabel("ICONIC FILE SUITE");
         app_title->setStyleSheet("font-size: 28px; font-weight: bold; color: #0078d4;");
         app_title->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_title);
         
-        auto* app_desc = new QLabel("Organize files with swipe-style sorting");
+        auto* app_desc = new QLabel("Modular launcher for File Tinder, File Filer, and File AI Filer");
         app_desc->setStyleSheet("font-size: 13px; color: #888888;");
         app_desc->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_desc);
@@ -228,15 +353,15 @@ private:
         resume_label_->setVisible(false);
         root_layout->addWidget(resume_label_);
         
-        // Mode buttons
-        auto* modes_label = new QLabel("Choose mode:");
+        // Module launch buttons
+        auto* modes_label = new QLabel("Choose module:");
         modes_label->setStyleSheet("font-weight: bold; font-size: 12px;");
         root_layout->addWidget(modes_label);
         
         auto* modes_row = new QHBoxLayout();
         modes_row->setSpacing(12);
         
-        auto* basic_mode_btn = new QPushButton("Basic Mode\n(Simple sorting)");
+        auto* basic_mode_btn = new QPushButton("File Tinder\n(Swipe sorting)");
         basic_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         basic_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #107c10; color: white; border: none; font-size: 13px; }"
@@ -245,7 +370,7 @@ private:
         connect(basic_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
         modes_row->addWidget(basic_mode_btn);
         
-        auto* adv_mode_btn = new QPushButton("Advanced Mode\n(Folder tree view)");
+        auto* adv_mode_btn = new QPushButton("File Filer\n(Folder tree filing)");
         adv_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         adv_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #5c2d91; color: white; border: none; font-size: 13px; }"
@@ -254,7 +379,7 @@ private:
         connect(adv_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
         modes_row->addWidget(adv_mode_btn);
         
-        auto* ai_mode_btn = new QPushButton("AI Mode\n(AI-assisted sorting)");
+        auto* ai_mode_btn = new QPushButton("File AI Filer\n(AI-assisted filing)");
         ai_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         ai_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #2980b9; color: white; border: none; font-size: 13px; }"
@@ -264,6 +389,34 @@ private:
         modes_row->addWidget(ai_mode_btn);
         
         root_layout->addLayout(modes_row);
+
+        auto* suite_row = new QHBoxLayout();
+
+        auto* launch_suite_btn = new QPushButton("Launch Suite...");
+        launch_suite_btn->setStyleSheet(
+            "QPushButton { padding: 8px 14px; background-color: #0b5fa5; color: white; border: none; font-size: 12px; }"
+            "QPushButton:hover { background-color: #0a4f8a; }"
+        );
+        connect(launch_suite_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_suite_selector);
+        suite_row->addWidget(launch_suite_btn);
+
+        auto* modules_btn = new QPushButton("Manage Modules...");
+        modules_btn->setStyleSheet(
+            "QPushButton { padding: 8px 14px; background-color: #4a4a4a; color: #e0e0e0; border: 1px solid #555555; font-size: 12px; }"
+            "QPushButton:hover { background-color: #555555; }"
+        );
+        connect(modules_btn, &QPushButton::clicked, this, &FileTinderLauncher::open_module_manager);
+        suite_row->addWidget(modules_btn);
+        suite_row->addStretch();
+
+        root_layout->addLayout(suite_row);
+
+        modules_status_label_ = new QLabel();
+        modules_status_label_->setStyleSheet(
+            "padding: 6px 10px; background-color: #1d2b3a; border: 1px solid #35526f; "
+            "color: #8ec7ff; font-size: 10px; border-radius: 4px;");
+        root_layout->addWidget(modules_status_label_);
+        update_modules_status_label();
         
         // Tools row: Clear Session + Undo History + Diagnostics
         auto* tools_row = new QHBoxLayout();
@@ -579,6 +732,208 @@ private:
         dlg->exec();
         dlg->deleteLater();
     }
+
+    bool launch_module(AppModule module) {
+        if (!is_module_available(module)) {
+            QMessageBox::warning(this, "Module Missing",
+                QString("%1 is not available in this installation.").arg(module_display_name(module)));
+            return false;
+        }
+
+        switch (module) {
+        case AppModule::Tinder:
+            launch_basic();
+            return true;
+        case AppModule::Filer:
+            launch_advanced();
+            return true;
+        case AppModule::AiFiler:
+            launch_ai();
+            return true;
+        }
+        return false;
+    }
+
+    bool launch_standalone_module(AppModule module) {
+        if (!standalone_module_paths_.contains(module)) return false;
+
+        QStringList args;
+        args << QString("--module=%1").arg(module_id(module));
+        if (!chosen_path_.isEmpty()) {
+            args << QString("--folder=%1").arg(chosen_path_);
+        }
+
+        const bool started = QProcess::startDetached(standalone_module_paths_[module], args);
+        if (!started) {
+            QMessageBox::warning(this, "Launch Failed",
+                QString("Could not launch standalone app for %1.").arg(module_display_name(module)));
+        }
+        return started;
+    }
+
+    void open_module_manager() {
+        refresh_module_discovery();
+
+        QDialog manager(this);
+        manager.setWindowTitle("Module Manager");
+        manager.setMinimumSize(ui::scaling::scaled(520), ui::scaling::scaled(300));
+
+        auto* layout = new QVBoxLayout(&manager);
+        layout->addWidget(new QLabel("Installed modules and companion standalone apps:"));
+
+        auto* table = new QTableWidget();
+        table->setColumnCount(3);
+        table->setHorizontalHeaderLabels({"Module", "Status", "Standalone Path"});
+        table->horizontalHeader()->setStretchLastSection(true);
+        table->setSelectionMode(QAbstractItemView::NoSelection);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+        const auto modules = module_catalog();
+        table->setRowCount(static_cast<int>(modules.size()));
+        for (int row = 0; row < static_cast<int>(modules.size()); ++row) {
+            const auto& descriptor = modules[row];
+            table->setItem(row, 0, new QTableWidgetItem(descriptor.app_name));
+            table->setItem(row, 1, new QTableWidgetItem(module_install_status(descriptor.module)));
+            table->setItem(row, 2, new QTableWidgetItem(
+                standalone_module_paths_.value(descriptor.module, "(none detected)")));
+        }
+        table->resizeColumnsToContents();
+        layout->addWidget(table, 1);
+
+        auto* note = new QLabel(
+            "Missing modules can be installed from release packages and are auto-detected "
+            "when found in PATH or beside this executable.");
+        note->setWordWrap(true);
+        note->setStyleSheet("color: #9fb7cf; font-size: 10px;");
+        layout->addWidget(note);
+
+        auto* btn_row = new QHBoxLayout();
+        auto* refresh_btn = new QPushButton("Rescan");
+        connect(refresh_btn, &QPushButton::clicked, this, [this, table]() {
+            refresh_module_discovery();
+            const auto modules = module_catalog();
+            for (int row = 0; row < static_cast<int>(modules.size()); ++row) {
+                const auto& descriptor = modules[row];
+                table->item(row, 1)->setText(module_install_status(descriptor.module));
+                table->item(row, 2)->setText(
+                    standalone_module_paths_.value(descriptor.module, "(none detected)"));
+            }
+        });
+        btn_row->addWidget(refresh_btn);
+
+        auto* download_btn = new QPushButton("Download Modules");
+        connect(download_btn, &QPushButton::clicked, &manager, [this]() {
+            const QUrl releases_url("https://github.com/iconictools/file-tinder/releases");
+            QDesktopServices::openUrl(releases_url);
+            QMessageBox::information(this, "Download",
+                "Release page opened. Download Iconic File Filer and Iconic File AI Filer packages, "
+                "then relaunch or click Rescan.");
+        });
+        btn_row->addWidget(download_btn);
+
+        btn_row->addStretch();
+        auto* close_btn = new QPushButton("Close");
+        connect(close_btn, &QPushButton::clicked, &manager, &QDialog::accept);
+        btn_row->addWidget(close_btn);
+        layout->addLayout(btn_row);
+
+        manager.exec();
+    }
+
+    void launch_suite_selector() {
+        refresh_module_discovery();
+
+        QDialog selector(this);
+        selector.setWindowTitle("Launch Module Suite");
+        selector.setMinimumSize(ui::scaling::scaled(430), ui::scaling::scaled(260));
+
+        auto* layout = new QVBoxLayout(&selector);
+        auto* help = new QLabel("Choose which modules to open for this session:");
+        help->setWordWrap(true);
+        layout->addWidget(help);
+
+        QMap<AppModule, QCheckBox*> checkboxes;
+        for (const auto& descriptor : module_catalog()) {
+            auto* checkbox = new QCheckBox(
+                QString("%1 — %2").arg(descriptor.app_name, descriptor.description));
+            checkbox->setChecked(is_module_available(descriptor.module));
+            checkbox->setEnabled(is_module_available(descriptor.module));
+            if (!is_module_available(descriptor.module)) {
+                checkbox->setToolTip("Not installed");
+            }
+            layout->addWidget(checkbox);
+            checkboxes[descriptor.module] = checkbox;
+        }
+
+        auto* standalone_opt = new QCheckBox(
+            "Open standalone companions when available (instead of integrated dialogs)");
+        standalone_opt->setChecked(false);
+        layout->addWidget(standalone_opt);
+
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        connect(buttons, &QDialogButtonBox::accepted, &selector, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &selector, &QDialog::reject);
+        layout->addWidget(buttons);
+
+        if (selector.exec() != QDialog::Accepted) return;
+
+        std::vector<AppModule> selected;
+        for (const auto& descriptor : module_catalog()) {
+            auto* checkbox = checkboxes.value(descriptor.module, nullptr);
+            if (checkbox && checkbox->isChecked()) selected.push_back(descriptor.module);
+        }
+
+        if (selected.empty()) {
+            QMessageBox::information(this, "No Modules Selected", "Select at least one module.");
+            return;
+        }
+
+        bool first = true;
+        const bool use_standalone = standalone_opt->isChecked();
+        for (AppModule module : selected) {
+            if (!first) skip_stats_on_next_launch_ = true;
+            if (use_standalone && launch_standalone_module(module)) {
+                // launched detached companion
+            } else {
+                launch_module(module);
+            }
+            first = false;
+        }
+    }
+
+    void handle_initial_module_request() {
+        if (!requested_module_ && !request_suite_launch_) return;
+
+        refresh_module_discovery();
+        if (request_suite_launch_) {
+            launch_suite_selector();
+            return;
+        }
+
+        if (!requested_module_) return;
+        const AppModule module = *requested_module_;
+        if (!is_module_available(module)) return;
+
+        if (available_module_count() > 1) {
+            QMessageBox prompt(this);
+            prompt.setIcon(QMessageBox::Question);
+            prompt.setWindowTitle("Open Module or Suite");
+            prompt.setText(QString("%1 was opened as a standalone module.")
+                .arg(module_display_name(module)));
+            prompt.setInformativeText("Do you want to attach to a multi-module suite session?");
+            auto* module_btn = prompt.addButton("Module Only", QMessageBox::AcceptRole);
+            auto* suite_btn = prompt.addButton("Open Suite Selector", QMessageBox::ActionRole);
+            prompt.addButton(QMessageBox::Cancel);
+            prompt.exec();
+            if (prompt.clickedButton() == suite_btn) {
+                launch_suite_selector();
+                return;
+            }
+            if (prompt.clickedButton() != module_btn) return;
+        }
+
+        launch_module(module);
+    }
     
     void open_diagnostics() {
         LOG_INFO("Launcher", "Opening diagnostic tool");
@@ -752,8 +1107,34 @@ int main(int argc, char* argv[]) {
     app_colors.setColor(QPalette::Highlight, QColor(0, 120, 212));
     app_colors.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
     qt_app.setPalette(app_colors);
-    
-    FileTinderLauncher launcher_window;
+
+    QString initial_folder;
+    std::optional<AppModule> requested_module = std::nullopt;
+    bool request_suite = false;
+
+    const QStringList args = QCoreApplication::arguments();
+    for (const QString& arg : args) {
+        if (arg == "--suite") {
+            request_suite = true;
+            continue;
+        }
+        if (arg.startsWith("--folder=")) {
+            initial_folder = arg.mid(QString("--folder=").size());
+            continue;
+        }
+        if (arg.startsWith("--module=")) {
+            const QString value = arg.mid(QString("--module=").size()).trimmed().toLower();
+            if (value == "tinder" || value == "basic") {
+                requested_module = AppModule::Tinder;
+            } else if (value == "filer" || value == "advanced") {
+                requested_module = AppModule::Filer;
+            } else if (value == "ai-filer" || value == "ai") {
+                requested_module = AppModule::AiFiler;
+            }
+        }
+    }
+
+    FileTinderLauncher launcher_window(initial_folder, requested_module, request_suite);
     launcher_window.show();
     
     int exit_code = qt_app.exec();

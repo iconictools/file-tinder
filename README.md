@@ -8,6 +8,15 @@ Made with a dream, Github Copilot, executive dysfunction and an obsessive attent
 
 ## Features
 
+### Modular App Suite
+- **Three modular apps in one launcher**:
+  - **Iconic File Tinder** (swipe sorting)
+  - **Iconic File Filer** (folder-tree filing)
+  - **Iconic File AI Filer** (AI-assisted filing)
+- **Suite launcher**: choose one module or multiple modules per session
+- **Module manager**: rescan/detect standalone companion executables and open release downloads
+- **Standalone-aware startup**: supports `--module=` and optional suite attach flow
+
 ### Basic Mode
 - **Swipe-style sorting**: Use arrow keys or buttons to quickly categorize files
   - → **Keep**: Keep file in original location
@@ -135,6 +144,20 @@ cmake --build . --config Release
 | `Qt6_DIR` | Auto-detected | Path to Qt6 CMake config |
 
 ## Usage
+
+### Optional Launch Arguments
+
+```bash
+# Open launcher with a preselected folder
+./FileTinder --folder=/path/to/files
+
+# Request a specific module on startup (tinder | filer | ai-filer)
+./FileTinder --module=tinder
+./FileTinder --module=filer --folder=/path/to/files
+
+# Open suite selector immediately
+./FileTinder --suite
+```
 
 ## Pristine Quality Checklist
 
