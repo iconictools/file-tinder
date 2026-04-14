@@ -57,7 +57,33 @@ struct ModuleDescriptor {
     QStringList standalone_executables;
 };
 
-static const QUrl kSuiteReleasesUrl("https://github.com/iconictools/file-tinder/releases");
+static const QUrl kSuiteReleasesURL("https://github.com/iconictools/file-tinder/releases");
+
+static const std::vector<ModuleDescriptor>& module_catalog() {
+    static const std::vector<ModuleDescriptor> catalog = {
+        {AppModule::Tinder, "tinder", "Iconic File Tinder",
+         "File Tinder\n(Swipe sorting)", "Core swipe-style file triage",
+         {"IconicFileTinder", "FileTinder", "iconic-file-tinder"}},
+        {AppModule::Filer, "filer", "Iconic File Filer",
+         "File Filer\n(Folder tree)", "Folder-mind-map filing workflow",
+         {"IconicFileFiler", "FileFiler", "iconic-file-filer"}},
+        {AppModule::AiFiler, "ai-filer", "Iconic File AI Filer",
+         "File AI Filer\n(AI-assisted)", "AI-assisted filing and category suggestions",
+         {"IconicFileAiFiler", "FileAiFiler", "iconic-file-ai-filer"}}
+    };
+    return catalog;
+}
+
+static std::optional<AppModule> module_from_argument_token(const QString& raw_value) {
+    const QString value = raw_value.trimmed().toLower();
+    for (const auto& descriptor : module_catalog()) {
+        if (value == descriptor.id) return descriptor.module;
+    }
+    if (value == "basic") return AppModule::Tinder;
+    if (value == "advanced") return AppModule::Filer;
+    if (value == "ai") return AppModule::AiFiler;
+    return std::nullopt;
+}
 
 class FileTinderLauncher : public QDialog {
     Q_OBJECT
@@ -135,20 +161,6 @@ private:
     bool request_suite_launch_ = false;
     QMap<AppModule, QString> standalone_module_paths_;
 
-    std::vector<ModuleDescriptor> module_catalog() const {
-        return {
-            {AppModule::Tinder, "tinder", "Iconic File Tinder",
-             "File Tinder\n(Swipe sorting)", "Core swipe-style file triage",
-             {"IconicFileTinder", "FileTinder", "iconic-file-tinder"}},
-            {AppModule::Filer, "filer", "Iconic File Filer",
-             "File Filer\n(Folder tree)", "Folder-mind-map filing workflow",
-             {"IconicFileFiler", "FileFiler", "iconic-file-filer"}},
-            {AppModule::AiFiler, "ai-filer", "Iconic File AI Filer",
-             "File AI Filer\n(AI-assisted)", "AI-assisted filing and category suggestions",
-             {"IconicFileAiFiler", "FileAiFiler", "iconic-file-ai-filer"}}
-        };
-    }
-
     QString module_display_name(AppModule module) const {
         for (const auto& descriptor : module_catalog()) {
             if (descriptor.module == module) return descriptor.app_name;
@@ -214,8 +226,10 @@ private:
     void update_modules_status_label() {
         if (!modules_status_label_) return;
         int standalone_count = standalone_module_paths_.size();
+        const int module_count = static_cast<int>(module_catalog().size());
         modules_status_label_->setText(
-            QString("Module suite ready: 3 integrated modules • %1 standalone companion(s) detected")
+            QString("Module suite ready: %1 integrated modules • %2 standalone companion(s) detected")
+                .arg(module_count)
                 .arg(standalone_count)
         );
     }
@@ -826,10 +840,14 @@ private:
 
         auto* download_btn = new QPushButton("Download Modules");
         connect(download_btn, &QPushButton::clicked, &manager, [this]() {
-            QDesktopServices::openUrl(kSuiteReleasesUrl);
+            QDesktopServices::openUrl(kSuiteReleasesURL);
+            QStringList module_names;
+            for (const auto& descriptor : module_catalog()) {
+                module_names << descriptor.app_name;
+            }
             QMessageBox::information(this, "Download",
-                "Release page opened. Download any module package you need "
-                "(Iconic File Tinder, Iconic File Filer, or Iconic File AI Filer), "
+                QString("Release page opened. Download any module package you need (%1), ")
+                    .arg(module_names.join(", ")) +
                 "then relaunch or click Rescan.");
         });
         btn_row->addWidget(download_btn);
@@ -1126,14 +1144,7 @@ int main(int argc, char* argv[]) {
             continue;
         }
         if (arg.startsWith("--module=")) {
-            const QString value = arg.mid(QString("--module=").size()).trimmed().toLower();
-            if (value == "tinder" || value == "basic") {
-                requested_module = AppModule::Tinder;
-            } else if (value == "filer" || value == "advanced") {
-                requested_module = AppModule::Filer;
-            } else if (value == "ai-filer" || value == "ai") {
-                requested_module = AppModule::AiFiler;
-            }
+            requested_module = module_from_argument_token(arg.mid(QString("--module=").size()));
         }
     }
 
