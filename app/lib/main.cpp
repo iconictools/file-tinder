@@ -57,7 +57,7 @@ struct ModuleDescriptor {
     QStringList standalone_executables;
 };
 
-static const QUrl kSuiteReleasesURL("https://github.com/iconictools/file-tinder/releases");
+static const QUrl suite_releases_url("https://github.com/iconictools/file-tinder/releases");
 
 static const std::vector<ModuleDescriptor>& module_catalog() {
     static const std::vector<ModuleDescriptor> catalog = {
@@ -175,6 +175,13 @@ private:
         return "unknown";
     }
 
+    QString module_button_title(AppModule module) const {
+        for (const auto& descriptor : module_catalog()) {
+            if (descriptor.module == module) return descriptor.button_title;
+        }
+        return module_display_name(module);
+    }
+
     bool is_integrated_module_available(AppModule module) const {
         Q_UNUSED(module);
         return true;  // current build ships all modules in a single binary
@@ -283,7 +290,7 @@ private:
         root_layout->setSpacing(18);
         
         // App header
-        auto* app_title = new QLabel("Iconic File Suite");
+        auto* app_title = new QLabel("FILE TINDER SUITE");
         app_title->setStyleSheet("font-size: 28px; font-weight: bold; color: #0078d4;");
         app_title->setAlignment(Qt::AlignCenter);
         root_layout->addWidget(app_title);
@@ -378,7 +385,7 @@ private:
         auto* modes_row = new QHBoxLayout();
         modes_row->setSpacing(12);
         
-        auto* basic_mode_btn = new QPushButton("File Tinder\n(Swipe sorting)");
+        auto* basic_mode_btn = new QPushButton(module_button_title(AppModule::Tinder));
         basic_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         basic_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #107c10; color: white; border: none; font-size: 13px; }"
@@ -387,7 +394,7 @@ private:
         connect(basic_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_basic);
         modes_row->addWidget(basic_mode_btn);
         
-        auto* adv_mode_btn = new QPushButton("File Filer\n(Folder tree filing)");
+        auto* adv_mode_btn = new QPushButton(module_button_title(AppModule::Filer));
         adv_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         adv_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #5c2d91; color: white; border: none; font-size: 13px; }"
@@ -396,7 +403,7 @@ private:
         connect(adv_mode_btn, &QPushButton::clicked, this, &FileTinderLauncher::launch_advanced);
         modes_row->addWidget(adv_mode_btn);
         
-        auto* ai_mode_btn = new QPushButton("File AI Filer\n(AI-assisted filing)");
+        auto* ai_mode_btn = new QPushButton(module_button_title(AppModule::AiFiler));
         ai_mode_btn->setMinimumSize(ui::scaling::scaled(180), ui::scaling::scaled(70));
         ai_mode_btn->setStyleSheet(
             "QPushButton { padding: 12px; background-color: #2980b9; color: white; border: none; font-size: 13px; }"
@@ -840,7 +847,11 @@ private:
 
         auto* download_btn = new QPushButton("Download Modules");
         connect(download_btn, &QPushButton::clicked, &manager, [this]() {
-            QDesktopServices::openUrl(kSuiteReleasesURL);
+            if (!QDesktopServices::openUrl(suite_releases_url)) {
+                QMessageBox::warning(this, "Open URL Failed",
+                    QString("Could not open release URL:\n%1").arg(suite_releases_url.toString()));
+                return;
+            }
             QStringList module_names;
             for (const auto& descriptor : module_catalog()) {
                 module_names << descriptor.app_name;
